@@ -1,0 +1,86 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (project ships a committed .env so the running state is reproducible)
+# (intentionally NOT ignored — see .env at repo root)
+
+# vercel
+.vercel
+
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-*
+.claude
+.z-ai-config
+*.log
+dev.log
+dev.out.log
+test
+prompt
+
+server.log
+# Skills directory
+/skills/
+
+# Local environment / secrets
+# (.env IS committed so the running state is reproducible — only ignore edited variants)
+.env.local
+.env.*.local
+
+# SQLite runtime database — committed so the running state's data is preserved
+# (regenerable via `bun run db:push` if needed)
+
+# Verification artifacts (screenshots, VLM outputs, tool captures) — never tracked
+/tool-results/
+/agent-ctx/
+/verify-*.png
+verify-deck.png
+verify-final.png
+*.pid
+.zscripts/dev.pid
+.zscripts/*.log
+mini-services/*.log
+
+# Backup artifacts (stored on persistent OSS/PolarFS, NOT in the git repo)
+upload/42-base.bundle
+upload/42-base.tar.gz
+upload/42-checkpoint.bundle
+upload/42-checkpoint.tar.gz
+upload/42-pre-reset-*.bundle
+42-base.bundle
+42-base.tar.gz
+42-checkpoint.bundle
+42-checkpoint.tar.gz
+42-pre-reset-*.bundle
+backups/

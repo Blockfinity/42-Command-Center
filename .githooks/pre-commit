@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Git pre-commit hook — refresh backups before each commit
+# ============================================================================
+# This hook lives in .githooks/ (committed) and is activated via:
+#   git config core.hooksPath .githooks
+#
+# Before every commit, refreshes the git bundle in upload/ (persistent OSS)
+# so the backup always reflects the latest committed state.
+# ============================================================================
+set -euo pipefail
+
+PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "$PROJECT_DIR" ] && exit 0
+
+UPLOAD_DIR="$PROJECT_DIR/upload"
+
+if [ -d "$UPLOAD_DIR" ]; then
+  # Only refresh bundle — tarball is too heavy for every commit
+  git bundle create "$UPLOAD_DIR/42-base.bundle" --all --tags 2>/dev/null || true
+  # Also copy to /home/sync (second OSS location) if writable
+  if [ -d "/home/sync/42-backups" ]; then
+    cp "$UPLOAD_DIR/42-base.bundle" "/home/sync/42-backups/42-base.bundle" 2>/dev/null || true
+  fi
+fi
+
+exit 0

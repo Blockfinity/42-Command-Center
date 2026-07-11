@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Git pre-reset safety hook — auto-backs up before destructive git operations
+# ============================================================================
+# This hook lives in .githooks/ (committed) and is activated via:
+#   git config core.hooksPath .githooks
+#
+# Triggers on: git reset --hard
+# Creates a fresh git bundle in upload/ (persistent OSS storage) so even if
+# a destructive command wipes the working tree, the base is recoverable.
+# ============================================================================
+set -euo pipefail
+
+PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "$PROJECT_DIR" ] && exit 0  # not in a git repo, nothing to do
+
+UPLOAD_DIR="$PROJECT_DIR/upload"
+BUNDLE="$UPLOAD_DIR/42-pre-reset-$(date +%Y%m%d-%H%M%S).bundle"
+
+# Only back up if upload/ (persistent OSS mount) exists
+if [ -d "$UPLOAD_DIR" ]; then
+  git bundle create "$BUNDLE" --all --tags 2>/dev/null || true
+  # Keep only the 5 most recent pre-reset bundles
+  ls -t "$UPLOAD_DIR"/42-pre-reset-*.bundle 2>/dev/null | tail -n +6 | xargs -r rm -f 2>/dev/null || true
+  echo "[safety-hook] Pre-reset backup saved to $BUNDLE" >&2
+fi
+
+exit 0
