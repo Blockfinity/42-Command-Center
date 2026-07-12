@@ -41,9 +41,10 @@ export function CommandDeck() {
   const [bootError, setBootError] = React.useState(false);
 
   // ---- connect gate: only start socket after user clicks ESTABLISH UPLINK ----
+  // BootScreen owns the click sound (transition cue + uplink sequence);
+  // parent just resumes AudioContext + flips the started flag.
   function handleConnect() {
     sfx.resume();
-    sfx.play("key");
     setStarted(true);
   }
 

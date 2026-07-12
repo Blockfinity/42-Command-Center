@@ -265,14 +265,40 @@
   animation: wallpaper-fade-in 3s ease-out 0.4s both, wallpaper-breathe 5s ease-in-out 3.4s infinite;
 }
 
-/* Loading bar fill — animates 0→88% over 2.8s (ease-out) then holds at 88%
-   to convey "handshake in progress". On error/retry the bar loops faster. */
-@keyframes boot-bar-fill {
-  0%   { width: 0%; }
-  100% { width: 88%; }
+/* Boot terminal pane — CRT-style frame with inner glow + scanline overlay.
+   Width/height are set inline on the element; this just styles the chrome. */
+.boot-terminal {
+  box-shadow: inset 0 0 24px oklch(1 0 0 / 0.04);
+  position: relative;
 }
-.boot-bar-fill        { animation: boot-bar-fill 2.8s ease-out forwards; }
-.boot-bar-fill--err   { animation: boot-bar-fill 1.6s ease-in-out infinite; }
+.boot-terminal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    oklch(0 0 0 / 0.25) 2px,
+    oklch(0 0 0 / 0.25) 3px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Terminal line fade-in — quick slide + opacity for a "printing" feel. */
+@keyframes boot-line-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.boot-line-in { animation: boot-line-in 0.18s ease-out; }
+
+/* Blinking block cursor — hard on/off (steps 1), classic terminal blink. */
+@keyframes boot-cursor-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.boot-cursor { animation: boot-cursor-blink 0.9s steps(1) infinite; }
 
 /* ===== Custom scrollbars (thin, monochrome) ===== */
 .thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }

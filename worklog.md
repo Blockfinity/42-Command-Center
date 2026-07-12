@@ -783,3 +783,51 @@ Stage Summary:
 - No force-push, no data loss, no junk committed.
 - Insurance branch `wip-local-backup` retained locally at a6dc37e.
 - GitHub PAT saved to ~/.git-credentials (0600) via credential.helper store for future pushes.
+
+---
+Task ID: BOOT-1
+Agent: main (Z.ai Code)
+Task: Improve the uplink/boot screen loading visualization — add terminal-style narrative ("Synchronizing with VirtuCorp servers", "Requesting AORDF..."), fix progress bar that stops at 88%, fix sound not playing on boot.
+
+Work Log:
+- Diagnosed two bugs in boot-screen.tsx:
+  (1) Progress bar CSS keyframe `boot-bar-fill` was defined as `0% → width:88%` with comment "holds at 88% to convey handshake in progress" — read as broken, not intentional.
+  (2) Sound on click was a single 60ms `key` blip (880Hz square) — too short/thin to be perceptible. No sound during boot sequence itself.
+- Added two new SFX cues to use-sfx.ts:
+  • `boot` — 180Hz, 0.04s square wave (deep terminal tick, one per UPLINK line)
+  • `powerOn` — 160→880Hz triangle sweep over 0.6s with custom envelope (quiet build → peak at 85% → quick cutoff). Feels like a proper "system online" moment.
+- Rewrote boot-screen.tsx with a two-phase terminal boot sequence:
+  • Phase 1 (BOOT, silent, pre-click, ~1.6s): 6 firmware/hardware init lines
+    ("VIRTUCORP SECURE TERMINAL", "Booting operative firmware [OK]", "ARIA cognitive core [READY]", etc.)
+  • Phase 2 (UPLINK, with sound, post-click, ~1.8s): 7 VirtuCorp/AORDF handshake lines
+    ("Requesting AORDF authentication token [GRANTED]", "Synchronizing with VirtuCorp servers [SYNCED]",
+     "Faction state sync · FANG ▸ HAMMER ▸ RESOLUTE [OK]", "UPLINK ESTABLISHED", etc.)
+  • Progress bar now JS-driven (lines.length / TOTAL_LINES × 100) — actually reaches 100%.
+  • Percentage counter (000%→100%) displayed next to bar.
+  • Terminal pane: CRT-style frame with scanline overlay, inner glow, auto-scroll, blinking cursor.
+  • Button: disabled during BOOT ("INITIALIZING..."), active during ready ("ESTABLISH UPLINK"),
+    disabled during UPLINK ("ESTABLISHING UPLINK..."), final ("UPLINK ESTABLISHED").
+  • onConnect() delayed until UPLINK sequence completes (350ms after powerOn sweep starts)
+    so the user gets the full cinematic before the deck loads.
+- Fixed React Strict Mode issue: original setInterval approach caused duplicated/skipped lines.
+  Rewrote with counter + setTimeout-per-render pattern (each render schedules exactly one timeout,
+  React cleanup cancels it on state change — immune to double-invocation).
+- Fixed ref dependency issue: useSfx returns a new object literal each render, causing effect
+  cleanup to cancel the onConnect timeout. Used refs (sfxRef, onConnectRef) updated in useEffect
+  with no deps, and removed sfx/onConnect from effect dep arrays.
+- Updated globals.css: removed `@keyframes boot-bar-fill` (88% cap) + `.boot-bar-fill` classes.
+  Added `.boot-terminal` (CRT scanlines + inner glow), `@keyframes boot-line-in` (fade+slide),
+  `@keyframes boot-cursor-blink` (hard on/off steps).
+- Updated command-deck.tsx: removed redundant `sfx.play("key")` in handleConnect (BootScreen
+  now owns all click/boot sound — transition cue on click, boot ticks per line, powerOn sweep).
+- Verified via Agent Browser + VLM:
+  • BOOT phase: all 6 lines render correctly (no dups/skips), bar at 46%, button "ESTABLISH UPLINK", blinking cursor visible.
+  • UPLINK phase: all 7 lines render (VLM confirmed "Synchronizing with VirtuCorp servers [SYNCED]" etc.), bar reaches 100%, button transitions through "ESTABLISHING UPLINK..." → "UPLINK ESTABLISHED".
+  • Command deck loads after onConnect delay: MapLibre canvas present, satellite Earth globe visible, nav rail functional.
+  • Lint clean, no console errors.
+
+Stage Summary:
+- Boot screen now has a cinematic terminal boot sequence with VirtuCorp/AORDF narrative.
+- Progress bar fills 0→100% (was stuck at 88%).
+- Sound: deep "boot" tick per UPLINK line + "transition" sweep on click + "powerOn" rising sweep on completion (was a single inaudible 60ms blip).
+- Two-phase design: BOOT (silent, pre-click) → UPLINK (with sound, post-click) → command deck.
