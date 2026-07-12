@@ -718,3 +718,43 @@ Stage Summary:
 - RESTORE.sh updated with correct `-b main` bundle clone flag.
 - To restore: `./RESTORE.sh bundle` or `./RESTORE.sh bare` or `./RESTORE.sh tarball` or `./RESTORE.sh auto`.
 - This version cannot get lost: 3 independent persistent storage systems (2× OSS cloud, 1× PolarFS) + bare repo + working tree, all verified restorable to the exact same commit `debd909`.
+
+---
+Task ID: 12
+Agent: main (Z.ai Code)
+Task: Create a full and complete as-is report, gap analysis, and PRD documenting the entire platform (technical, professional, complete)
+
+Work Log:
+- Gathered full platform context in parallel: types.ts (data model), prisma/schema.prisma, package.json (tech stack), game-engine/index.ts (895-line engine), command-deck.tsx (UI shell), command.ts (Zustand store), API routes (state + AI briefing), world-map.tsx structure
+- Analyzed the user's reference image (SurveilTrack drone surveillance dashboard) via VLM glm-4.6v to establish the visual fidelity target for the gap analysis:
+  - Reference layout: header + left sidebar + split main (unit details + 3D map) + bottom tabbed bar with horizontal unit list
+  - Reference map: high-fidelity 3D satellite terrain (city-level), dark monochrome, discrete unit markers with status dots (green/red/gray)
+  - Reference chrome: black panels, wireframe drone models, progress bars, horizontal tabular unit lists
+  - Reference colors: #1A1A1A bg, #FFF text, #00FF00/#FF0000/#808080 status accents
+- Wrote comprehensive 3-part document (PLATFORM-REPORT.md, 41 KB):
+  - Part I — As-Is Report: architecture overview, tech stack table, data model (all types), game engine (loop + socket protocol + scaling notes), frontend architecture (component hierarchy + state + map implementation + AI co-pilot), backup system (4-layer + hooks + verification), current capabilities, current limitations
+  - Part II — Gap Analysis: reference visual target analysis, 18-row gap matrix (capability vs reference vs current vs severity), 7 critical gaps summarized (dashboard layer, unit telemetry, multi-user/auth, historical data, real telemetry, status colors, production scaling)
+  - Part III — PRD: vision & objectives, design principles, target personas, 4-phase functional requirements (16 FRs), non-functional requirements (performance/reliability/security/accessibility/browser), architecture evolution (current → target diagram), phased roadmap (4 phases with durations + tasks + metrics), success metrics (product/technical/backup), risks & mitigations (7 risks), appendix (file inventory, API surface, socket events, glossary), document control
+- Generated professional PDF via HTML→Playwright pipeline:
+  - Wrote build-report-html.py: markdown→HTML converter with custom dark-theme CSS matching the platform aesthetic (pure black bg, white text, monospace labels, dark tables with white borders)
+  - Cover page: full-bleed black, "42" title at 48pt, subtitle, metadata block, bottom bar
+  - Table of contents page
+  - 24 body pages with 17 tables, code blocks, styled headings
+  - Used html2pdf-next.js with --nopaged (Chromium native @page pagination) since pagedjs not installed
+  - Fixed cover validation: removed decorative ::before line, increased spacing to pass cover_validate.js gap requirements
+  - Set PDF metadata (Title, Author, Subject, Creator) via pdf.py meta.set
+- PDF quality verification:
+  - pdf_qa.py: PASS with 22 non-blocking warnings (em-dash line-starts in tables, full-width table centering flags, hand-coded TOC not clickable — all acceptable for HTML-to-PDF flow)
+  - VLM glm-4.6v visual verification: cover + TOC = 8/10 ("professional, on-brand, organized"), interior pages = 8/10 ("technical and professional, tables render cleanly in dark theme, complete and polished")
+- Final deliverables:
+  - PLATFORM-REPORT.md (41 KB) — canonical markdown source
+  - PLATFORM-REPORT.html (58 KB) — styled dark-theme HTML
+  - PLATFORM-REPORT.pdf (443 KB, 26 pages, ~5000 words, 17 tables) — professional vector PDF
+
+Stage Summary:
+- Complete technical platform documentation delivered in 3 formats (MD + HTML + PDF).
+- Document covers the entire platform: 19 sections across 3 parts (As-Is, Gap Analysis, PRD).
+- As-Is Report inventories: 3-process architecture, 15-row tech stack table, full data model (12 types), 895-line engine, 22-layer map, 4-layer backup system.
+- Gap Analysis: 18-row capability matrix vs SurveilTrack reference, 7 critical gaps identified and prioritized.
+- PRD: 4-phase roadmap (Dashboard → Multi-user → Real telemetry → Scaling), 16 functional requirements, non-functional requirements, architecture evolution diagram, success metrics, 7-risk mitigation table.
+- PDF is 26 pages, dark-theme, professional, VLM-verified at 8/10.
