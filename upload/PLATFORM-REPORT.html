@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>42 — Platform As-Is Report, Gap Analysis &amp; PRD</title>
+<style>
+@page {
+  size: A4;
+  margin: 22mm 18mm 20mm 18mm;
+  @bottom-center {
+    content: counter(page) " / " counter(pages);
+    font-family: 'Liberation Mono', 'DejaVu Sans Mono', monospace;
+    font-size: 8pt;
+    color: #71717a;
+    letter-spacing: 0.1em;
+  }
+}
+@page :first {
+  margin: 0;
+  @bottom-center { content: none; }
+}
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0a0a0a;
+  color: #e4e4e7;
+  font-family: 'Liberation Sans', 'DejaVu Sans', 'Noto Sans', sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.55;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ---- COVER PAGE ---- */
+.cover {
+  page-break-after: always;
+  width: 210mm;
+  height: 297mm;
+  background: #000;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40mm 22mm 30mm 22mm;
+  box-sizing: border-box;
+  position: relative;
+}
+.cover-top { }
+.cover-label {
+  font-family: 'Liberation Mono', monospace;
+  font-size: 9pt;
+  letter-spacing: 0.35em;
+  color: #71717a;
+  text-transform: uppercase;
+  margin-bottom: 15mm;
+}
+.cover-title {
+  font-size: 48pt;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 0 0 10mm 0;
+  color: #fff;
+}
+.cover-subtitle {
+  font-size: 14pt;
+  font-weight: 400;
+  color: #a1a1aa;
+  line-height: 1.4;
+  max-width: 150mm;
+  margin-top: 8mm;
+}
+.cover-meta {
+  font-family: 'Liberation Mono', monospace;
+  font-size: 8.5pt;
+  color: #71717a;
+  letter-spacing: 0.08em;
+  line-height: 2.2;
+}
+.cover-meta strong { color: #e4e4e7; font-weight: 600; }
+.cover-bottom {
+  border-top: 1px solid #27272a;
+  padding-top: 8mm;
+  margin-top: 15mm;
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Liberation Mono', monospace;
+  font-size: 8pt;
+  color: #52525b;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* ---- BODY CONTENT ---- */
+h1 {
+  font-size: 18pt;
+  font-weight: 700;
+  color: #fff;
+  border-bottom: 2px solid #fff;
+  padding-bottom: 3mm;
+  margin-top: 14mm;
+  margin-bottom: 5mm;
+  page-break-after: avoid;
+}
+h1:first-of-type { margin-top: 0; }
+h2 {
+  font-size: 13pt;
+  font-weight: 700;
+  color: #e4e4e7;
+  margin-top: 9mm;
+  margin-bottom: 3mm;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #d4d4d8;
+  margin-top: 6mm;
+  margin-bottom: 2mm;
+  page-break-after: avoid;
+}
+h4 {
+  font-size: 10pt;
+  font-weight: 600;
+  color: #a1a1aa;
+  margin-top: 4mm;
+  margin-bottom: 2mm;
+  page-break-after: avoid;
+}
+p {
+  margin: 0 0 2.5mm 0;
+  color: #d4d4d8;
+}
+strong { color: #fff; font-weight: 700; }
+em { color: #c4b5fd; font-style: italic; }
+code {
+  font-family: 'Liberation Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 8.5pt;
+  background: #18181b;
+  color: #f4f4f5;
+  padding: 0.5mm 1.5mm;
+  border-radius: 1mm;
+  border: 1px solid #27272a;
+}
+pre {
+  background: #0a0a0a;
+  border: 1px solid #27272a;
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+  overflow-x: auto;
+  page-break-inside: avoid;
+  margin: 3mm 0;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 8pt;
+  line-height: 1.45;
+  color: #a1a1aa;
+}
+ul {
+  margin: 0 0 3mm 0;
+  padding-left: 6mm;
+}
+li {
+  margin-bottom: 1mm;
+  color: #d4d4d8;
+}
+hr {
+  border: none;
+  border-top: 1px solid #27272a;
+  margin: 6mm 0;
+}
+
+/* ---- TABLES ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 3mm 0 5mm 0;
+  font-size: 8.5pt;
+  page-break-inside: avoid;
+}
+th {
+  background: #18181b;
+  color: #fff;
+  font-weight: 700;
+  text-align: left;
+  padding: 2mm 3mm;
+  border: 1px solid #3f3f46;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 8pt;
+}
+td {
+  padding: 2mm 3mm;
+  border: 1px solid #27272a;
+  color: #d4d4d8;
+  vertical-align: top;
+}
+tr:nth-child(even) td {
+  background: #0f0f0f;
+}
+tr:nth-child(odd) td {
+  background: #131316;
+}
+td strong { color: #fff; }
+
+/* ---- TOC ---- */
+.toc {
+  page-break-after: always;
+}
+.toc h1 {
+  border-bottom: 2px solid #fff;
+}
+.toc ul {
+  list-style: none;
+  padding-left: 0;
+}
+.toc > ul > li {
+  font-weight: 700;
+  color: #fff;
+  margin-top: 3mm;
+  font-size: 10pt;
+}
+.toc ul ul {
+  padding-left: 6mm;
+  margin-top: 1mm;
+}
+.toc ul ul li {
+  font-weight: 400;
+  color: #a1a1aa;
+  font-size: 9pt;
+}
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <div class="cover-top">
+    <div class="cover-label">Technical Report &middot; Internal</div>
+    <h1 class="cover-title">42</h1>
+    <div class="cover-subtitle">Platform As-Is Report, Gap Analysis &amp; Product Requirements Document</div>
+  </div>
+  <div class="cover-meta">
+    <strong>Document Version:</strong> 1.0<br/>
+    <strong>Date:</strong> July 2026<br/>
+    <strong>Checkpoint:</strong> debd909<br/>
+    <strong>Classification:</strong> Technical &mdash; Internal
+  </div>
+  <div class="cover-bottom">
+    <span>42 // COMMAND INTERFACE</span>
+    <span>DEFINITIVE CHECKPOINT</span>
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+<h1>Table of Contents</h1>
+<ul>
+<li>Executive Summary</li>
+<li>Part I — As-Is Report
+  <ul>
+  <li>1. Architecture Overview</li>
+  <li>2. Data Model</li>
+  <li>3. Game Engine</li>
+  <li>4. Frontend Architecture</li>
+  <li>5. Backup &amp; Safety System</li>
+  <li>6. Current Capabilities</li>
+  <li>7. Current Limitations</li>
+  </ul>
+</li>
+<li>Part II — Gap Analysis
+  <ul>
+  <li>8. Reference Visual Target</li>
+  <li>9. Gap Matrix</li>
+  <li>10. Critical Gaps Summary</li>
+  </ul>
+</li>
+<li>Part III — Product Requirements Document
+  <ul>
+  <li>11. Vision &amp; Objectives</li>
+  <li>12. Functional Requirements</li>
+  <li>13. Non-Functional Requirements</li>
+  <li>14. Technical Architecture Evolution</li>
+  <li>15. Phased Roadmap</li>
+  <li>16. Success Metrics</li>
+  <li>17. Risks &amp; Mitigations</li>
+  <li>18. Appendix</li>
+  <li>19. Document Control</li>
+  </ul>
+</li>
+</ul>
+</div>
+
+<!-- BODY -->
+<h1>42 — Platform As-Is Report, Gap Analysis &amp; Product Requirements Document</h1>
+
+<p><strong>Document Version:</strong> 1.0</p>
+<p><strong>Date:</strong> July 2026</p>
+<p><strong>Checkpoint:</strong> <code>debd909</code> (sole canonical version)</p>
+<p><strong>Classification:</strong> Technical — Internal</p>
+
+<hr/>
+
+<h2>Executive Summary</h2>
+
+<p><strong>42</strong> is a gamified, real-time strategy command interface simulating a decentralized compute network where three factions — <strong>FANG</strong>, <strong>HAMMER</strong>, and <strong>RESOLUTE</strong> — wage live wargames across a real 1:1 satellite Earth globe. The platform combines a Next.js 16 frontend, a socket.io authoritative game engine, an LLM-powered tactical co-pilot (ARIA), and a real Esri World Imagery base map styled in a monochrome tactical aesthetic.</p>
+
+<p>This document provides a complete technical inventory of the platform's current state (As-Is), a structured gap analysis against the product vision (a full data dashboard with drone-attack visualization at the fidelity of professional surveillance platforms), and a phased Product Requirements Document (PRD) defining the work required to close the gaps and scale to millions of users.</p>
+
+<p>The platform is currently at a <strong>functional MVP</strong> stage: the core game loop (territory control, missions, outposts, AI briefings) is operational and visually grounded on a real Earth globe, but several layers — unit-level telemetry, dashboard-grade data visualization, and production scaling infrastructure — remain to be built.</p>
+
+<hr/>
+
+<h1>PART I — AS-IS REPORT</h1>
+
+<h2>1. Architecture Overview</h2>
+
+<h3>1.1 System Topology</h3>
+
+<p>The platform consists of three runtime processes plus a persistent storage layer:</p>
+
+<table>
+<tr><th>Component</th><th>Port</th><th>Role</th><th>Persistence</th></tr>
+<tr><td>Next.js App (frontend + API)</td><td>3000</td><td>React UI, REST API routes, SSR gateway</td><td>Rootfs (regenerable)</td></tr>
+<tr><td>Game Engine (socket.io)</td><td>3003</td><td>Authoritative in-memory GameState, game loop, client actions</td><td>Rootfs (in-memory)</td></tr>
+<tr><td>Caddy Gateway</td><td>80/443</td><td>Single external port; <code>XTransformPort</code> query routing</td><td>Rootfs (regenerable)</td></tr>
+<tr><td>SQLite (Prisma)</td><td>File</td><td>Operative profile + war log persistence</td><td>Rootfs (tracked in git)</td></tr>
+</table>
+
+<p>All three processes run concurrently. The Caddy gateway exposes a single external port and routes API/WebSocket traffic to the correct internal port via the <code>?XTransformPort=&lt;port&gt;</code> query parameter. This is a hard constraint of the sandbox environment.</p>
+
+<h3>1.2 Request Flow</h3>
+
+<pre><code>Browser ──► Caddy :3000 ──┬─► Next.js (SSR, API routes)
+                          │     ├─ GET  /api/state  → proxy to engine :3003
+                          │     ├─ POST /api/ai/briefing → z-ai-web-dev-sdk (LLM)
+                          │     └─ POST /api/ai/outpost-briefing → z-ai-web-dev-sdk
+                          └─► Game Engine :3003 (via XTransformPort=3003)
+                                ├─ socket.io "state" → full GameState snapshot every 2s
+                                ├─ socket.io "action" → client→server actions
+                                └─ socket.io "action-result" → server→client feedback</code></pre>
+
+<p>The frontend uses a <strong>dual-channel</strong> data strategy: an initial REST fetch (<code>/api/state</code>) for the first snapshot, then a persistent socket.io connection for real-time 2-second ticks.</p>
+
+<h3>1.3 Technology Stack</h3>
+
+<table>
+<tr><th>Layer</th><th>Technology</th><th>Version</th><th>Notes</th></tr>
+<tr><td>Framework</td><td>Next.js (App Router)</td><td>16.1.1</td><td>Single route <code>/</code> only</td></tr>
+<tr><td>Language</td><td>TypeScript</td><td>5.x</td><td>Strict typing throughout</td></tr>
+<tr><td>Styling</td><td>Tailwind CSS</td><td>4.x</td><td>+ shadcn/ui (New York)</td></tr>
+<tr><td>State (client)</td><td>Zustand</td><td>5.0.6</td><td><code>useCommand</code> store</td></tr>
+<tr><td>State (server)</td><td>In-memory (engine)</td><td>—</td><td>GameState object</td></tr>
+<tr><td>Real-time</td><td>socket.io</td><td>4.8.3</td><td>Client + server</td></tr>
+<tr><td>Map</td><td>MapLibre GL JS</td><td>5.24.0</td><td>3D globe projection</td></tr>
+<tr><td>Map data</td><td>world-atlas</td><td>2.0.2</td><td>countries-10m (1:10M, 255 countries)</td></tr>
+<tr><td>Map imagery</td><td>Esri World Imagery</td><td>—</td><td>Raster satellite tiles, no API key</td></tr>
+<tr><td>Database</td><td>Prisma + SQLite</td><td>6.11.1</td><td>Operative + WarLog models</td></tr>
+<tr><td>AI</td><td>z-ai-web-dev-sdk</td><td>0.0.18</td><td>LLM (server-only)</td></tr>
+<tr><td>Animation</td><td>Framer Motion</td><td>12.23.2</td><td>UI transitions</td></tr>
+<tr><td>Charts</td><td>Recharts</td><td>2.15.4</td><td>Available but underutilized</td></tr>
+<tr><td>Icons</td><td>Lucide React</td><td>0.525.0</td><td>—</td></tr>
+<tr><td>Auth</td><td>NextAuth.js</td><td>4.24.11</td><td>Available, not yet wired</td></tr>
+<tr><td>Validation</td><td>Zod</td><td>4.0.2</td><td>—</td></tr>
+</table>
+
+<hr/>
+
+<h2>2. Data Model</h2>
+
+<h3>2.1 Core Domain Types</h3>
+
+<p>The shared type contract lives in <code>src/lib/types.ts</code> and is the source of truth between the engine, API, and client.</p>
+
+<p><strong>FactionId</strong> — <code>"FANG" | "HAMMER" | "RESOLUTE"</code> (3 factions)</p>
+
+<p><strong>Outpost</strong> — A node on the globe controlled by a faction:</p>
+<ul><li><code>id</code>, <code>name</code>, <code>type</code> (<code>FULL</code> | <code>TACTICAL</code> | <code>SAFEHOUSE</code>), <code>faction</code></li>
+<li><code>lat</code>, <code>lng</code> (real geographic coordinates)</li>
+<li><code>level</code>, <code>health</code>, <code>maxHealth</code>, <code>compute</code> (TFLOPS), <code>uptime</code> (seconds), <code>buildPoints</code></li>
+<li><code>status</code> (<code>ONLINE</code> | <code>DEGRADED</code> | <code>OFFLINE</code> | <code>UNDER_ATTACK</code>)</li>
+<li><code>establishedAt</code> (epoch ms)</li></ul>
+
+<p><strong>Mission</strong> — An in-progress operation between two outposts:</p>
+<ul><li><code>type</code>: <code>DRONE_STRIKE</code> | <code>CYBER_ATTACK</code> | <code>ESPIONAGE</code> | <code>RECON</code> | <code>BUILD</code> | <code>DEFEND</code></li>
+<li><code>status</code>: <code>QUEUED</code> | <code>ACTIVE</code> | <code>COMPLETE</code> | <code>FAILED</code></li>
+<li><code>sourceId</code>, <code>targetId</code> (outpost IDs), <code>faction</code></li>
+<li><code>progress</code> (0–100), <code>eta</code> (seconds), <code>startedAt</code>, <code>label</code></li></ul>
+
+<p><strong>Territory</strong> — A named geographic region factions fight to control:</p>
+<ul><li><code>id</code>, <code>name</code>, <code>polygon</code> ([lng,lat][] closed ring), <code>center</code></li>
+<li><code>controller</code> (FactionId | null), <code>control</code> (0–100 dominance)</li>
+<li><code>influence</code> (per-faction influence sum)</li></ul>
+
+<p><strong>ActivityPing</strong> — Transient live-action point ("millions of actions" visualization):</p>
+<ul><li><code>lat</code>, <code>lng</code>, <code>type</code> (<code>STRIKE</code> | <code>BUILD</code> | <code>DEPLOY</code> | <code>SCAN</code> | <code>BREACH</code> | <code>TRAFFIC</code>)</li>
+<li><code>faction</code>, <code>intensity</code> (0–1), <code>bornAt</code> (epoch ms)</li></ul>
+
+<p><strong>Faction</strong> — Aggregate faction stats: <code>strength</code>, <code>compute</code>, <code>territories</code>, <code>outposts</code>, <code>threat</code></p>
+
+<p><strong>Operative</strong> — The player: <code>codename</code>, <code>tier</code> (<code>BASIC</code> | <code>ELITE</code> | <code>ARCHON</code>), <code>faction</code>, <code>authority</code></p>
+
+<p><strong>GameState</strong> — The authoritative snapshot: <code>tick</code>, <code>sol</code>, <code>clock</code>, <code>factions</code>, <code>outposts</code>, <code>missions</code>, <code>events</code>, <code>threatLevel</code>, <code>operative</code>, <code>briefing</code>, <code>territories</code>, <code>activityPings</code>, <code>networkLoad</code>, <code>totalActions</code></p>
+
+<h3>2.2 Currency System</h3>
+
+<ul><li><strong>VOTC</strong> — Network-universal currency</li>
+<li><strong>Faction tokens</strong> — Each faction mints its own token (FANG, HAMMER, RESOLUTE) for intra-faction upgrades and tribute</li></ul>
+
+<h3>2.3 Database Schema (Prisma/SQLite)</h3>
+
+<p>The live game state is in-memory for speed. SQLite persists only:</p>
+<ul><li><strong>Operative</strong> — codename, tier, faction, authority, victories, defeats</li>
+<li><strong>WarLog</strong> — resolved mission outcomes (sol, operative, faction, outcome, summary)</li></ul>
+
+<h3>2.4 Territory Definitions</h3>
+
+<p>12 named geographic regions are hardcoded in the engine:</p>
+
+<table>
+<tr><th>Territory</th><th>Center</th><th>Controller Logic</th></tr>
+<tr><td>North America</td><td>[-100, 45]</td><td>Aggregate outpost influence (level + health + proximity)</td></tr>
+<tr><td>South America</td><td>[-65, -20]</td><td>Recomputed every tick</td></tr>
+<tr><td>Europe</td><td>[15, 50]</td><td>Controller flips when leading faction changes</td></tr>
+<tr><td>Africa</td><td>[20, 0]</td><td>Event pushed on flip</td></tr>
+<tr><td>Middle East</td><td>[47, 28]</td><td>—</td></tr>
+<tr><td>Central Asia</td><td>[65, 47]</td><td>—</td></tr>
+<tr><td>South Asia</td><td>[75, 22]</td><td>—</td></tr>
+<tr><td>East Asia</td><td>[115, 38]</td><td>—</td></tr>
+<tr><td>Southeast Asia</td><td>[115, 5]</td><td>—</td></tr>
+<tr><td>Oceania</td><td>[135, -25]</td><td>—</td></tr>
+<tr><td>Arctic</td><td>[-30, 80]</td><td>—</td></tr>
+<tr><td>Atlantic</td><td>[-30, 50]</td><td>—</td></tr>
+</table>
+
+<h3>2.5 Seeded Outposts</h3>
+
+<p>16 outposts are seeded across real-world cities at boot:</p>
+
+<table>
+<tr><th>Faction</th><th>Outposts</th><th>Cities</th></tr>
+<tr><td>FANG</td><td>5</td><td>New York, London, Tokyo, Dubai, Sydney</td></tr>
+<tr><td>HAMMER</td><td>6</td><td>San Francisco, Stockholm, Singapore, Buenos Aires, Rio, Moscow</td></tr>
+<tr><td>RESOLUTE</td><td>5</td><td>Hong Kong, Istanbul, Lagos, Cairo, Reykjavik</td></tr>
+</table>
+
+<hr/>
+
+<h2>3. Game Engine (Port 3003)</h2>
+
+<h3>3.1 Architecture</h3>
+
+<p>The engine is a standalone Bun mini-service (<code>mini-services/game-engine/index.ts</code>, 895 lines) running socket.io on port 3003. It holds the authoritative <code>GameState</code> in memory and runs a game loop every 2 seconds (<code>TICK_MS = 2000</code>).</p>
+
+<h3>3.2 Game Loop</h3>
+
+<p>Each tick performs:</p>
+<p>1. <strong>Uptime accrual</strong> — Each outpost's <code>uptime</code> increases; <code>buildPoints</code> accrue from uptime</p>
+<p>2. <strong>Mission progression</strong> — Active missions advance <code>progress</code>, decrement <code>eta</code>; on completion, effects are applied (damage, build points, threat changes)</p>
+<p>3. <strong>Territory recalculation</strong> — Per-territory influence is recomputed from outpost level + health + proximity to centroid; controllers flip when the leading faction changes</p>
+<p>4. <strong>Faction recalculation</strong> — Aggregate <code>strength</code>, <code>compute</code>, <code>outposts</code>, <code>territories</code>, <code>threat</code> per faction</p>
+<p>5. <strong>Activity ping synthesis</strong> — 2–4 new pings spawned per tick near random outposts, weighted by type (TRAFFIC 40%, BUILD 20%, SCAN 15%, DEPLOY 10%, BREACH 8%, STRIKE 7%)</p>
+<p>6. <strong>Event generation</strong> — Faction AI launches occasional missions; events pushed for flips, strikes, breaches</p>
+<p>7. <strong>Broadcast</strong> — Full <code>GameState</code> snapshot emitted to all connected clients</p>
+
+<h3>3.3 Client Actions (Socket Protocol)</h3>
+
+<p>Client → Server (<code>socket.emit("action", ...)</code>):</p>
+<ul><li><code>launch-mission</code> — <code>{ missionType, sourceId, targetId }</code></li>
+<li><code>place-outpost</code> — <code>{ type, lat, lng, name? }</code> (user clicks globe to deploy)</li>
+<li><code>upgrade-outpost</code> — <code>{ id }</code></li>
+<li><code>request-briefing</code> — triggers AI briefing generation</li></ul>
+
+<p>Server → Client:</p>
+<ul><li><code>state</code> — full GameState snapshot (every 2s)</li>
+<li><code>action-result</code> — <code>{ ok, error?, note? }</code> feedback on submitted actions</li></ul>
+
+<h3>3.4 Scaling Architecture (Current vs Target)</h3>
+
+<p>The engine code documents the target scaling architecture explicitly:</p>
+<ul><li><strong>Current:</strong> Single-process, in-memory, full-state snapshot every 2s (~16 outposts + ~80 pings + 12 territories — small enough for simplicity)</li>
+<li><strong>Target (millions of users):</strong> (a) shard state by region (each territory = independent actor), (b) emit delta updates instead of full snapshots, (c) batch action ingress at an edge gateway</li></ul>
+
+<hr/>
+
+<h2>4. Frontend Architecture</h2>
+
+<h3>4.1 Component Hierarchy</h3>
+
+<p>The UI is a single-page floating-HUD architecture over a full-screen globe:</p>
+
+<pre><code>&lt;CommandDeck&gt;
+  ├── &lt;BootScreen /&gt;              — "ESTABLISH UPLINK" gate (audio resume + socket init)
+  ├── &lt;WorldMap /&gt;                — Full-screen MapLibre 3D globe (all graphics localized)
+  ├── &lt;CommandBar /&gt;              — Top floating bar (brand, clock, threat, standings, profile)
+  │     ├── &lt;BrandArea /&gt;         — Logo + system name
+  │     ├── &lt;ClockArea /&gt;         — Sol cycle + real-time clock
+  │     ├── &lt;ThreatArea /&gt;        — Global threat level (GREEN/AMBER/RED/BLACK)
+  │     ├── &lt;StandingsArea /&gt;     — 3-faction strength leaderboard
+  │     ├── &lt;StatsArea /&gt;         — Active nodes, network load, total actions
+  │     └── &lt;ProfileArea /&gt;       — Operative codename + tier + authority
+  ├── &lt;NavRail /&gt;                 — Left vertical nav (8 views: MAP/FEED/STRIKE/QUEUE/AI/INTEL/DEPLOY/CONFIG)
+  ├── &lt;LeftPanel /&gt;               — Context panel (mission launcher, feed, AI briefing)
+  ├── &lt;RightPanel /&gt;              — Outpost detail / list
+  ├── &lt;OutpostDetailCard /&gt;       — Selected outpost details + actions
+  ├── &lt;StatusBar /&gt;               — Bottom bar (connection, tick, coords)
+  └── &lt;Toaster /&gt;                 — Toast notifications</code></pre>
+
+<h3>4.2 State Management</h3>
+
+<p>The <code>useCommand</code> Zustand store (<code>src/stores/command.ts</code>) holds:</p>
+<ul><li><code>state: GameState | null</code> — live game state from socket</li>
+<li><code>connected: boolean</code> — socket connection status</li>
+<li><code>briefing: Briefing | null</code> + <code>briefingLoading</code> — AI briefing</li>
+<li><code>selectedOutpostId</code>, <code>pendingMission</code>, <code>placementMode</code> — UI interaction state</li>
+<li><code>socket: Socket | null</code> — singleton socket.io connection</li></ul>
+
+<p>The socket connects via <code>io("/", { query: { XTransformPort: "3003" }, transports: ["polling", "websocket"] })</code>.</p>
+
+<h3>4.3 Map/Globe Implementation</h3>
+
+<p>The globe (<code>src/components/command/world-map.tsx</code>, ~1090 lines) is the visual centerpiece. Key implementation details:</p>
+
+<p><strong>Base Layer — Real 1:1 Earth:</strong></p>
+<ul><li><strong>Esri World Imagery</strong> raster tiles (<code>server.arcgisonline.com/.../World_Imagery/MapServer/tile/{z}/{y}/{x}</code>)</li>
+<li>No API key, no server, no download — lightweight raster tiles</li>
+<li>Monochrome-tactical paint: <code>raster-saturation: -0.85</code> (near-grayscale), <code>raster-brightness-max: 0.85</code>, <code>raster-contrast: 0.15</code></li></ul>
+
+<p><strong>Vector Overlay:</strong></p>
+<ul><li><strong>Natural Earth 10m</strong> country data (255 countries, 544,898 coordinate points — 27× more detail than 110m)</li>
+<li>Zoom-responsive coastline width (0.5px → 2.4px across zoom 0→8)</li>
+<li>Faint white landmass fill + dark ocean tint</li></ul>
+
+<p><strong>Projection:</strong></p>
+<ul><li><code>projection: { type: "globe" }</code> set in the style spec (guaranteed active from first render, not a post-load hack)</li></ul>
+
+<p><strong>Gameplay Layers (22 total, bottom → top):</strong></p>
+<p>1. <code>satellite-base</code> — real Earth imagery</p>
+<p>2. <code>ocean-fill</code> — dark ocean tint</p>
+<p>3. <code>graticule</code> — lat/lng grid lines (every 15°)</p>
+<p>4. <code>countries-fill</code> / <code>countries-line</code> — vector coastlines + borders</p>
+<p>5. <code>territory-fill</code> / <code>territory-line</code> / <code>territory-label</code> — 12 territory control polygons (fill opacity = control %)</p>
+<p>6. <code>halos-fill</code> — per-outpost influence circles</p>
+<p>7. <code>activity-pings</code> — sonar/heat layer (expanding rings, aged out by <code>bornAt</code>)</p>
+<p>8. <code>vectors-agg</code> / <code>vectors-pass</code> — mission attack arcs (great-circle paths, aggressive vs passive)</p>
+<p>9. <code>vectors-agg-impact</code> — pulsing impact points at active strike targets</p>
+<p>10. <code>progress-heads</code> — moving dots along active mission arcs</p>
+<p>11. <code>outpost-cluster</code> / <code>outpost-safehouse-aura</code> / <code>outpost-pulse</code> / <code>outpost-health-ring</code> / <code>outpost-shape</code> — clustered outpost markers with faction sprites (hex/diamond/square), health rings, under-attack pulses, safehouse fortified auras</p>
+
+<p><strong>Performance Optimizations:</strong></p>
+<ul><li>Outpost clustering (clusterRadius 32, clusterMaxZoom 5) — collapses dense regions below zoom 5</li>
+<li>Visible-hemisphere culling — pings outside ~100° of map center are dropped</li>
+<li>Active-mission-only arc rendering — arcs built only for ACTIVE/COMPLETE missions</li>
+<li>Throttled animation loops (10–12fps via setInterval, not rAF) for ping/progress motion</li></ul>
+
+<p><strong>Interaction:</strong></p>
+<ul><li>Click outpost → select + open detail card</li>
+<li>Click globe in placement mode → deploy new outpost at real lat/lng</li>
+<li>Drag-rotate, scroll-zoom, touch-zoom-rotate, double-click-zoom all enabled</li></ul>
+
+<h3>4.4 AI Co-Pilot (ARIA)</h3>
+
+<p>Two LLM-powered API routes use <code>z-ai-web-dev-sdk</code> (server-only):</p>
+
+<p><strong><code>POST /api/ai/briefing</code></strong> — Global tactical briefing:</p>
+<ul><li>Sends compacted GameState (factions, outposts, missions, events) to the LLM</li>
+<li>System prompt: "You are ARIA, the AI operations co-pilot..."</li>
+<li>Returns strict JSON: <code>{ summary, threatAssessment, recommendations[] }</code></li>
+<li>Each recommendation: <code>{ id, title, rationale, action: "launch:TYPE:src:tgt", confidence }</code></li>
+<li>Fallback: deterministic heuristic briefing if LLM fails</li></ul>
+
+<p><strong><code>POST /api/ai/outpost-briefing</code></strong> — Per-outpost situational assessment:</p>
+<ul><li>Returns <code>OutpostBrief</code>: <code>{ assessment, recommendation, priority, confidence, votcAtStake, token }</code></li></ul>
+
+<h3>4.5 Audio</h3>
+
+<p><code>useSfx</code> hook provides:</p>
+<ul><li>Ticking sound during boot (170ms interval)</li>
+<li>Key/confirm/deny sounds for actions</li>
+<li>AudioContext resume on user gesture (browser autoplay policy)</li></ul>
+
+<hr/>
+
+<h2>5. Backup &amp; Safety System</h2>
+
+<h3>5.1 Four-Layer Backup Architecture</h3>
+
+<p>The platform has a verified 4-layer backup system to prevent progress loss:</p>
+
+<table>
+<tr><th>Layer</th><th>Location</th><th>Persistence</th><th>Size</th><th>Restore Command</th></tr>
+<tr><td>Bare repo</td><td><code>/home/z/42-backup.git</code></td><td>Rootfs</td><td>—</td><td><code>./RESTORE.sh bare</code></td></tr>
+<tr><td>Git bundles (×3)</td><td><code>upload/</code>, <code>/home/sync/42-backups/</code>, <code>/tmp/my-project/</code></td><td>OSS cloud ×2 + PolarFS</td><td>7.7 MB</td><td><code>./RESTORE.sh bundle</code></td></tr>
+<tr><td>Tarballs (×3)</td><td>Same 3 locations</td><td>OSS cloud ×2 + PolarFS</td><td>7.8 MB</td><td><code>./RESTORE.sh tarball</code></td></tr>
+<tr><td>Working .git</td><td><code>/home/z/my-project/</code></td><td>Rootfs</td><td>—</td><td>Live</td></tr>
+</table>
+
+<p>All 3 persistent storage systems survive environment resets:</p>
+<ul><li><strong><code>upload/</code></strong> — OSS cloud mount</li>
+<li><strong><code>/home/sync/</code></strong> — OSS cloud mount (second independent OSS)</li>
+<li><strong><code>/tmp/my-project/</code></strong> — PolarFS mount</li></ul>
+
+<h3>5.2 Git Safety Hooks</h3>
+
+<ul><li><strong><code>.githooks/pre-reset</code></strong> — Auto-creates a timestamped bundle in <code>upload/</code> before any <code>git reset --hard</code> (keeps 5 most recent)</li>
+<li><strong><code>.githooks/pre-commit</code></strong> — Refreshes <code>upload/42-base.bundle</code> + <code>/home/sync/42-backups/42-base.bundle</code> before every commit</li></ul>
+
+<p>Hooks are activated via <code>git config core.hooksPath .githooks</code>.</p>
+
+<h3>5.3 Restore Verification</h3>
+
+<p>All 3 restore paths were verified end-to-end against checkpoint <code>debd909</code>:</p>
+<ul><li>Bare repo clone → HEAD <code>debd909</code>, 142 files</li>
+<li>Bundle clone (<code>git clone -b main</code>) → HEAD <code>debd909</code>, 142 files, satellite + 10m data confirmed</li>
+<li>Tarball extract → 142 files, all critical files present</li></ul>
+
+<h3>5.4 Current Checkpoint</h3>
+
+<ul><li><strong>Commit:</strong> <code>debd9092edf0471f506d38483100bd6dee77e13a</code></li>
+<li><strong>Tag:</strong> <code>base</code> (annotated, points to checkpoint)</li>
+<li><strong>Files:</strong> 142 tracked</li>
+<li><strong>History:</strong> Single parentless commit (orphan-branch squash — no prior history, clean checkpoint)</li></ul>
+
+<hr/>
+
+<h2>6. Current Capabilities (What Works)</h2>
+
+<h3>6.1 Functional</h3>
+
+<ul><li>Real-time 3D globe with actual satellite Earth imagery (Esri World Imagery)</li>
+<li>3 factions with 16 seeded outposts at real global cities</li>
+<li>12 territory control zones with live influence recalculation and visual flips</li>
+<li>6 mission types (DRONE_STRIKE, CYBER_ATTACK, ESPIONAGE, RECON, BUILD, DEFEND) with progress arcs</li>
+<li>Activity ping "sonar" layer simulating planet-scale activity (~80 concurrent pings)</li>
+<li>Safehouse node placement (user clicks globe to deploy at real coordinates)</li>
+<li>Outpost upgrade system (build points → level/health)</li>
+<li>AI tactical briefings (LLM-generated, with heuristic fallback)</li>
+<li>Per-outpost AI situational assessments</li>
+<li>Boot screen with audio gate + socket initialization</li>
+<li>Floating HUD: command bar, nav rail, left/right panels, status bar, outpost detail card</li>
+<li>Toast feedback on all actions (confirm/deny sounds)</li>
+<li>Keyboard navigation (1–8 for views, ESC to cancel)</li>
+<li>Network load + total actions counters (simulated millions-scale metrics)</li></ul>
+
+<h3>6.2 Visual</h3>
+
+<ul><li>Monochrome black-and-white tactical aesthetic</li>
+<li>Desaturated satellite base (near-grayscale, darkened)</li>
+<li>White vector coastlines + borders (zoom-responsive)</li>
+<li>Faction shape markers (hex/diamond/square sprites)</li>
+<li>Health rings, under-attack pulses, safehouse fortified auras</li>
+<li>Great-circle attack arcs with animated progress heads</li>
+<li>Expanding sonar rings for activity pings</li>
+<li>Territory fill opacity driven by control percentage</li></ul>
+
+<h3>6.3 Infrastructure</h3>
+
+<ul><li>4-layer backup system (all verified restorable)</li>
+<li>Git safety hooks (auto-backup before destructive ops)</li>
+<li>Single external port via Caddy gateway</li>
+<li>Both processes (Next.js + engine) running concurrently</li>
+<li>Lint clean, dev server stable</li></ul>
+
+<hr/>
+
+<h2>7. Current Limitations (What Doesn't Work Yet)</h2>
+
+<h3>7.1 Scale</h3>
+<ul><li>Single-process in-memory engine (no sharding, no delta updates)</li>
+<li>Full-state snapshot every 2s (bandwidth scales O(n) with state size, not O(changes))</li>
+<li>No authentication — single operative, no multi-user</li>
+<li>No persistent game state across engine restarts (in-memory only)</li></ul>
+
+<h3>7.2 Data</h3>
+<ul><li>All outposts/missions are synthetic (seeded + AI-driven, not real user actions)</li>
+<li>Activity pings are synthesized by the engine, not from real telemetry</li>
+<li>No real drone/unit telemetry</li>
+<li>No historical data (no time-series storage, no replay)</li></ul>
+
+<h3>7.3 Visualization</h3>
+<ul><li>No unit-level detail view (no wireframe models, no per-unit telemetry dashboard)</li>
+<li>No charts/graphs in the UI (Recharts installed but unused)</li>
+<li>No data tables (no sortable/filterable unit lists)</li>
+<li>No timeline/feed visualization (events exist but no dedicated timeline panel)</li>
+<li>No heatmap density visualization (pings are discrete points, not aggregated heat)</li></ul>
+
+<h3>7.4 Interaction</h3>
+<ul><li>No drag-and-drop mission planning</li>
+<li>No multi-select for batch operations</li>
+<li>No replay/scrubbing of historical state</li>
+<li>No export/report generation from the UI</li></ul>
+
+<hr/>
+
+<h1>PART II — GAP ANALYSIS</h1>
+
+<h2>8. Reference Visual Target</h2>
+
+<p>The product vision references a professional surveillance-platform aesthetic (exemplified by the SurveilTrack drone-dashboard reference image). The key visual fidelity characteristics of that target:</p>
+
+<h3>8.1 Reference Layout</h3>
+<ul><li><strong>Header bar:</strong> Logo, navigation tabs (BRIEF / UNIT MAP / SETUP), contextual info (location, time)</li>
+<li><strong>Left sidebar:</strong> Vertical icon menu (grid, drone, shield, warning, lock, users, headset, profile, settings)</li>
+<li><strong>Main area split:</strong> Left panel (unit details, wireframe model, metrics) + right panel (3D map)</li>
+<li><strong>Bottom bar:</strong> Tabbed navigation (Unit list / Statistics / Performances / Overview / Messages) + horizontal scrollable unit list with status indicators</li>
+<li><strong>Map controls:</strong> Zoom +/- and full-screen buttons on the map edge</li></ul>
+
+<h3>8.2 Reference Map</h3>
+<ul><li>High-fidelity 3D satellite terrain (city-level detail: buildings, waterways, streets)</li>
+<li>Dark monochromatic scheme (buildings near-black, waterways dark gray, streets thin white)</li>
+<li>Discrete unit markers (small white squares with labels) positioned above buildings</li>
+<li>Status indicators (green = active, red = inactive, gray = disabled)</li>
+<li>Subtle dashed connection lines between units and detail panels</li></ul>
+
+<h3>8.3 Reference UI Chrome</h3>
+<ul><li>Black panels with thin white borders, high contrast</li>
+<li>Wireframe 3D models for unit details</li>
+<li>Progress bars for metrics (power, signal)</li>
+<li>Horizontal tabular unit lists with status dots</li>
+<li>Stats in white text with uppercase labels</li></ul>
+
+<h3>8.4 Reference Color &amp; Typography</h3>
+<ul><li><strong>Background:</strong> <code>#1A1A1A</code> (panels), <code>#222222</code> (map terrain)</li>
+<li><strong>Text:</strong> <code>#FFFFFF</code> (all labels/metrics)</li>
+<li><strong>Status accents:</strong> <code>#00FF00</code> (active), <code>#FF0000</code> (inactive), <code>#808080</code> (disabled), <code>#FFA500</code> (moderate)</li>
+<li><strong>Typography:</strong> Bold uppercase sans-serif for headers (~18px, weight 700), medium uppercase for nav (~14px, weight 500), regular for metrics (~14px, weight 400)</li></ul>
+
+<hr/>
+
+<h2>9. Gap Matrix</h2>
+
+<table>
+<tr><th>Capability</th><th>Reference Target</th><th>Current State</th><th>Gap Severity</th></tr>
+<tr><td><strong>Base map</strong></td><td>3D satellite terrain (city-level)</td><td>Esri satellite globe (continent-level zoom)</td><td>LOW — data source is correct; needs higher zoom + terrain</td></tr>
+<tr><td><strong>Map projection</strong></td><td>3D globe + city-level 3D</td><td>3D globe (globe projection active)</td><td>NONE — projection matches</td></tr>
+<tr><td><strong>Unit markers</strong></td><td>Discrete labeled squares with status dots</td><td>Faction shape sprites (hex/diamond/square) with health rings</td><td>MEDIUM — need unit-level markers, not just outpost-level</td></tr>
+<tr><td><strong>Unit detail panel</strong></td><td>Wireframe 3D model + metrics (power, session, signal)</td><td>Outpost detail card (health, compute, build points)</td><td>MEDIUM — needs richer telemetry + visual model</td></tr>
+<tr><td><strong>Unit list</strong></td><td>Horizontal scrollable list with status dots (active/inactive/disabled)</td><td>Right panel outpost list</td><td>MEDIUM — needs status taxonomy + horizontal scroll pattern</td></tr>
+<tr><td><strong>Bottom tabbed bar</strong></td><td>Unit list / Statistics / Performances / Overview / Messages</td><td>NavRail (8 vertical views)</td><td>LOW — navigation exists, structure differs</td></tr>
+<tr><td><strong>Charts/statistics</strong></td><td>Performance charts, statistics tab</td><td>None (Recharts installed, unused)</td><td>HIGH — no data visualization</td></tr>
+<tr><td><strong>Attack vectors</strong></td><td>Connection lines between units</td><td>Great-circle mission arcs (animated)</td><td>NONE — exceeds reference</td></tr>
+<tr><td><strong>Territory zones</strong></td><td>Not in reference</td><td>12 territory polygons with control %</td><td>EXCEEDS reference</td></tr>
+<tr><td><strong>Activity heat</strong></td><td>Not in reference</td><td>Activity ping sonar layer</td><td>EXCEEDS reference</td></tr>
+<tr><td><strong>Threat level</strong></td><td>Not in reference</td><td>Global threat level (GREEN/AMBER/RED/BLACK)</td><td>EXCEEDS reference</td></tr>
+<tr><td><strong>AI co-pilot</strong></td><td>Not in reference</td><td>ARIA LLM briefings + per-outpost assessments</td><td>EXCEEDS reference</td></tr>
+<tr><td><strong>Drone attacks</strong></td><td>Core feature (drone surveillance)</td><td>DRONE_STRIKE mission type (arc + impact pulse)</td><td>MEDIUM — visual is good, no drone-level telemetry</td></tr>
+<tr><td><strong>Real-time data</strong></td><td>Live unit status</td><td>2s tick snapshots</td><td>LOW — cadence is good</td></tr>
+<tr><td><strong>Color palette</strong></td><td>Green/red/gray status dots</td><td>Pure monochrome (white-on-black)</td><td>MEDIUM — status colors would aid scannability</td></tr>
+<tr><td><strong>Typography</strong></td><td>Bold uppercase sans-serif</td><td>Monospace tactical font</td><td>LOW — current is thematically appropriate</td></tr>
+<tr><td><strong>Multi-user scale</strong></td><td>Implied (fleet of units)</td><td>Single operative, 16 outposts</td><td>HIGH — no authentication, no real users</td></tr>
+<tr><td><strong>Historical data</strong></td><td>Performance tab implies history</td><td>None (in-memory, no time-series)</td><td>HIGH — no replay, no trends</td></tr>
+</table>
+
+<hr/>
+
+<h2>10. Critical Gaps Summary</h2>
+
+<h3>10.1 Gap A: No Data Dashboard Layer (HIGH)</h3>
+<p>The platform has a beautiful globe but lacks the dashboard-grade data visualization tools shown in the reference. There are no charts, no sortable tables, no statistics panels, no performance trends. Recharts is installed but completely unused. The reference's "Statistics / Performances" tabs have no equivalent.</p>
+
+<h3>10.2 Gap B: No Unit-Level Telemetry (HIGH)</h3>
+<p>The platform operates at the <strong>outpost</strong> level (16 nodes), but the reference operates at the <strong>unit</strong> level (individual drones with power, signal, session time). There is no concept of individual units within an outpost, no per-unit telemetry, no unit status taxonomy (active/inactive/disabled).</p>
+
+<h3>10.3 Gap C: No Multi-User / Authentication (HIGH)</h3>
+<p>NextAuth.js is installed but not wired. The platform supports a single operative with no login. Scaling to "millions of users taking millions of actions" requires authentication, per-user state, and action attribution.</p>
+
+<h3>10.4 Gap D: No Historical Data / Replay (MEDIUM)</h3>
+<p>All state is in-memory with no time-series storage. There is no way to review past missions, track performance trends, or replay territory changes over time. The WarLog table exists but is not populated.</p>
+
+<h3>10.5 Gap E: No Real Telemetry Source (MEDIUM)</h3>
+<p>All activity is synthesized by the engine. Activity pings, mission outcomes, and faction AI are all simulated. There is no ingestion of real user actions, no real compute metrics, no real network load data.</p>
+
+<h3>10.6 Gap F: Status Color Taxonomy Missing (MEDIUM)</h3>
+<p>The reference uses green/red/gray for instant scannability of unit status. The platform is pure monochrome. While thematically consistent, this reduces situational awareness speed for large unit counts.</p>
+
+<h3>10.7 Gap G: Production Scaling Infrastructure (MEDIUM)</h3>
+<p>The engine is single-process. The code documents the target architecture (regional sharding, delta updates, edge action batching) but none is implemented. Bandwidth scales O(n) with state size.</p>
+
+<hr/>
+
+<h1>PART III — PRODUCT REQUIREMENTS DOCUMENT</h1>
+
+<h2>11. Vision &amp; Objectives</h2>
+
+<h3>11.1 Product Vision</h3>
+
+<p><strong>42</strong> is a real-time strategy command platform where millions of users command factions in a persistent global wargame, fighting for territory, launching drone strikes, deploying safehouses, and managing compute infrastructure — all visualized on a real 1:1 Earth globe with dashboard-grade data tools and an AI tactical co-pilot.</p>
+
+<h3>11.2 Design Principles</h3>
+
+<p>1. <strong>Real geography, real stakes</strong> — Every action occurs at a real lat/lng on actual satellite Earth</p>
+<p>2. <strong>Dashboard clarity</strong> — Data must be scannable in &lt;3 seconds (tables, charts, status colors)</p>
+<p>3. <strong>Cinematic tactical aesthetic</strong> — Monochrome dark theme, monospace typography, military-grade UI</p>
+<p>4. <strong>Planet-scale feel</strong> — Activity pings and network-load counters convey millions of actions</p>
+<p>5. <strong>AI-augmented decisions</strong> — ARIA co-pilot provides actionable recommendations, not just data</p>
+<p>6. <strong>Never lose progress</strong> — 4-layer backup system is non-negotiable</p>
+
+<h3>11.3 Target Personas</h3>
+
+<table>
+<tr><th>Persona</th><th>Description</th><th>Primary Need</th></tr>
+<tr><td><strong>Commander</strong></td><td>Faction leader managing multiple outposts</td><td>Strategic overview + AI briefings</td></tr>
+<tr><td><strong>Operative</strong></td><td>Individual user running missions</td><td>Unit-level control + mission queue</td></tr>
+<tr><td><strong>Analyst</strong></td><td>Observer reviewing performance</td><td>Historical data + statistics + trends</td></tr>
+<tr><td><strong>Recruit</strong></td><td>New user onboarding</td><td>Clear deployment flow + safehouse placement</td></tr>
+</table>
+
+<hr/>
+
+<h2>12. Functional Requirements</h2>
+
+<h3>Phase 1: Dashboard &amp; Telemetry (Closes Gaps A, B, F)</h3>
+
+<p><strong>FR-1.1: Unit-Level Telemetry Model</strong></p>
+<ul><li>Add <code>Unit</code> type to the data model: <code>{ id, outpostRef, type, status, power, signal, sessionTime, lastAction }</code></li>
+<li>Each outpost contains 1–N units (drones, workers, scanners)</li>
+<li>Unit status taxonomy: <code>ACTIVE</code> | <code>INACTIVE</code> | <code>DISABLED</code> | <code>ENGAGED</code></li>
+<li>Engine synthesizes per-unit telemetry each tick</li></ul>
+
+<p><strong>FR-1.2: Unit Detail Panel</strong></p>
+<ul><li>Wireframe-style unit visualization (SVG/CSS, not 3D — keep it lightweight)</li>
+<li>Real-time metrics: power %, signal strength, session duration, action count</li>
+<li>Status indicator (colored dot: green/red/gray/orange)</li>
+<li>Action history (last 5 actions for this unit)</li></ul>
+
+<p><strong>FR-1.3: Unit List (Horizontal Scrollable)</strong></p>
+<ul><li>Bottom-bar horizontal scrollable list of all units for the operative's faction</li>
+<li>Each card: unit ID, status dot, power %, current task</li>
+<li>Click → opens unit detail panel</li>
+<li>Filter by status (all / active / inactive / disabled)</li></ul>
+
+<p><strong>FR-1.4: Statistics Dashboard</strong></p>
+<ul><li>New NavRail view: <code>STATS</code> (replaces or augments existing view)</li>
+<li>Faction strength over time (line chart)</li>
+<li>Territory control breakdown (stacked bar)</li>
+<li>Mission success rate (donut)</li>
+<li>Top operatives leaderboard (table)</li>
+<li>Network load trend (area chart)</li></ul>
+
+<p><strong>FR-1.5: Performance Tab</strong></p>
+<ul><li>Per-operative performance metrics</li>
+<li>Missions launched / succeeded / failed</li>
+<li>Compute contributed</li>
+<li>Territory captures</li>
+<li>Kill/death ratio (outpost losses)</li></ul>
+
+<p><strong>FR-1.6: Status Color System</strong></p>
+<ul><li>Introduce a controlled color palette for status only (not for faction identity — factions stay monochrome via shape):</li>
+<li><code>ACTIVE</code>: <code>#22c55e</code> (green)</li>
+<li><code>INACTIVE</code>: <code>#ef4444</code> (red)</li>
+<li><code>DISABLED</code>: <code>#71717a</code> (gray)</li>
+<li><code>ENGAGED</code>: <code>#f59e0b</code> (amber)</li>
+<li>Apply to unit status dots, outpost status badges, and event severity icons</li></ul>
+
+<h3>Phase 2: Multi-User &amp; Persistence (Closes Gaps C, D)</h3>
+
+<p><strong>FR-2.1: Authentication</strong></p>
+<ul><li>Wire NextAuth.js with credential provider (email + password)</li>
+<li><code>Operative</code> model becomes the user profile</li>
+<li>Session → operative mapping</li>
+<li>Guest mode preserved (boot screen → "ESTABLISH UPLINK" → demo operative)</li></ul>
+
+<p><strong>FR-2.2: Per-User State</strong></p>
+<ul><li>Each authenticated operative has their own outpost subset</li>
+<li>Actions attributed to operative ID</li>
+<li>Operative-scoped mission queue</li>
+<li>Operative-scoped build points + VOTC balance</li></ul>
+
+<p><strong>FR-2.3: Time-Series Storage</strong></p>
+<ul><li>New Prisma model: <code>StateSnapshot</code> (sol, gameState JSON, createdAt)</li>
+<li>Engine writes a snapshot every 60 seconds (1/min = 1440/day)</li>
+<li>Retention: 7 days at 1-min granularity, then downsample to 1-hour for 90 days</li></ul>
+
+<p><strong>FR-2.4: Replay System</strong></p>
+<ul><li>New NavRail view: <code>REPLAY</code></li>
+<li>Timeline scrubber (sol-based)</li>
+<li>Play/pause/step controls</li>
+<li>Globe renders historical state at selected timestamp</li>
+<li>Territory flips + mission outcomes replayed</li></ul>
+
+<p><strong>FR-2.5: WarLog Population</strong></p>
+<ul><li>Engine writes to <code>WarLog</code> on every mission completion</li>
+<li>Outcome, summary, operative, faction, sol</li>
+<li>Queryable in the Stats dashboard</li></ul>
+
+<h3>Phase 3: Real Telemetry Ingestion (Closes Gap E)</h3>
+
+<p><strong>FR-3.1: Action Ingestion API</strong></p>
+<ul><li><code>POST /api/actions</code> — operatives submit actions via REST (not just socket)</li>
+<li>Action queue with rate limiting (per-operative)</li>
+<li>Action validation (source ownership, target validity, resource cost)</li></ul>
+
+<p><strong>FR-3.2: Real Compute Metrics</strong></p>
+<ul><li>If the platform connects to real compute nodes (browser-based workers via TACTICAL outposts), ingest real uptime/compute</li>
+<li>Worker heartbeat protocol (WebWorker → engine)</li>
+<li>Real network load = sum of active worker actions/sec</li></ul>
+
+<p><strong>FR-3.3: Event Webhook System</strong></p>
+<ul><li>Outbound webhooks for territory flips, mission completions, threat changes</li>
+<li>Enables external integrations (Discord, analytics, etc.)</li></ul>
+
+<h3>Phase 4: Production Scaling (Closes Gap G)</h3>
+
+<p><strong>FR-4.1: Delta Updates</strong></p>
+<ul><li>Engine emits only changed fields per tick (not full snapshot)</li>
+<li>Client applies delta patch to local state</li>
+<li>Reduces bandwidth from O(state_size) to O(changes_per_tick)</li></ul>
+
+<p><strong>FR-4.2: Regional Sharding</strong></p>
+<ul><li>Split engine into territory-actor processes (each territory = independent actor)</li>
+<li>Territory actors hold authoritative state for their region</li>
+<li>Cross-territory missions use a message bus</li></ul>
+
+<p><strong>FR-4.3: Edge Action Batching</strong></p>
+<ul><li>Caddy (or a dedicated edge worker) batches client actions</li>
+<li>Debounce + coalesce within a 200ms window</li>
+<li>Reduces engine ingress load by ~10× at scale</li></ul>
+
+<p><strong>FR-4.4: Protomaps PMTiles Migration</strong></p>
+<ul><li>Replace Esri World Imagery endpoint with self-hosted Protomaps PMTiles</li>
+<li>Single static file, OSM vector tiles, no per-request cost</li>
+<li>CDN-scalable for millions of concurrent tile requests</li>
+<li>One-line source URL change in <code>mapStyle.sources.satellite</code></li></ul>
+
+<hr/>
+
+<h2>13. Non-Functional Requirements</h2>
+
+<h3>13.1 Performance</h3>
+
+<table>
+<tr><th>Metric</th><th>Target</th><th>Current</th></tr>
+<tr><td>Initial load (TTI)</td><td>&lt; 3s</td><td>~2s (measured)</td></tr>
+<tr><td>Tick latency (engine → render)</td><td>&lt; 500ms</td><td>~2s (2s tick + render)</td></tr>
+<tr><td>Concurrent users</td><td>1,000,000+</td><td>1 (single operative)</td></tr>
+<tr><td>Concurrent outposts</td><td>100,000+</td><td>16</td></tr>
+<tr><td>Activity pings/sec</td><td>10,000+</td><td>~2/tick (1/sec)</td></tr>
+<tr><td>Map tile requests</td><td>CDN-cached</td><td>Direct to Esri</td></tr>
+<tr><td>Bundle size</td><td>&lt; 500KB gzipped</td><td>~350KB (estimated)</td></tr>
+</table>
+
+<h3>13.2 Reliability</h3>
+
+<ul><li>Engine auto-restart on crash (Bun <code>--hot</code> provides file-watch restart; need process supervisor for crash recovery)</li>
+<li>Socket.io reconnection (already implemented: <code>reconnection: true, reconnectionDelay: 800</code>)</li>
+<li>State recovery: on engine restart, restore last snapshot from SQLite <code>StateSnapshot</code> table</li>
+<li>Backup integrity: daily automated bundle refresh to all 3 persistent locations</li></ul>
+
+<h3>13.3 Security</h3>
+
+<ul><li>NextAuth.js session validation on all mutating API routes</li>
+<li>Rate limiting: 10 actions/min/operative (configurable)</li>
+<li>Input validation: Zod schemas on all API inputs</li>
+<li>WebSocket auth: session token in socket handshake</li>
+<li>No client-side <code>z-ai-web-dev-sdk</code> usage (enforced — server-only)</li></ul>
+
+<h3>13.4 Accessibility</h3>
+
+<ul><li>WCAG 2.1 AA compliance</li>
+<li>Keyboard navigation (already partially implemented: 1–8 views, ESC cancel)</li>
+<li>Screen reader support (<code>sr-only</code> labels on all icon-only buttons)</li>
+<li>Minimum 44px touch targets (already enforced via shadcn/ui)</li>
+<li>Color contrast: status colors must meet 4.5:1 contrast ratio against dark background</li></ul>
+
+<h3>13.5 Browser Support</h3>
+
+<ul><li>Chrome/Edge 120+ (WebGL2 for MapLibre globe)</li>
+<li>Firefox 120+</li>
+<li>Safari 17+ (WebGL2 + socket.io)</li>
+<li>Mobile: iOS Safari 17+, Chrome Android (touch-zoom-rotate enabled)</li></ul>
+
+<hr/>
+
+<h2>14. Technical Architecture Evolution</h2>
+
+<h3>14.1 Current Architecture (MVP)</h3>
+
+<pre><code>[Browser] ←socket.io→ [Engine :3003 (in-memory, single-process)]
+    ↓                       ↑
+[Next.js :3000] ←REST proxy─┘
+    ↓
+[SQLite (operative + warlog)]</code></pre>
+
+<h3>14.2 Target Architecture (Production)</h3>
+
+<pre><code>[Browser] ←socket.io (delta)→ [Edge Gateway (batch actions)]
+    ↓                                ↓
+[Next.js :3000] ←REST→ [Action Queue (Redis)]
+    ↓                        ↓
+[CDN (PMTiles)]      [Territory Shards (N actors)]
+    ↓                        ↓
+[SQLite]              [Time-Series DB (StateSnapshot)]
+                             ↓
+                     [Event Bus (webhooks)]</code></pre>
+
+<h3>14.3 Migration Path</h3>
+
+<p>The architecture evolves in 4 phases (mapping to the functional requirements):</p>
+<p>1. <strong>Phase 1</strong> (Dashboard): Frontend-only — no backend changes</p>
+<p>2. <strong>Phase 2</strong> (Multi-user): Auth + persistence — NextAuth + StateSnapshot table</p>
+<p>3. <strong>Phase 3</strong> (Real telemetry): Action API + worker protocol</p>
+<p>4. <strong>Phase 4</strong> (Scaling): Delta updates + sharding + edge batching + PMTiles</p>
+
+<p>Each phase is independently deployable and does not break the previous phase.</p>
+
+<hr/>
+
+<h2>15. Phased Roadmap</h2>
+
+<table>
+<tr><th>Phase</th><th>Focus</th><th>Duration</th><th>Key Deliverables</th><th>Success Metric</th></tr>
+<tr><td><strong>1</strong></td><td>Dashboard &amp; Telemetry</td><td>2 weeks</td><td>Unit model, unit list, stats dashboard, status colors</td><td>Stats view renders 5+ charts; unit list scrolls</td></tr>
+<tr><td><strong>2</strong></td><td>Multi-User &amp; Persistence</td><td>3 weeks</td><td>Auth, per-user state, replay, WarLog</td><td>10+ concurrent operatives; replay scrubs 24h</td></tr>
+<tr><td><strong>3</strong></td><td>Real Telemetry</td><td>2 weeks</td><td>Action API, worker heartbeat, webhooks</td><td>1000+ real actions/min ingested</td></tr>
+<tr><td><strong>4</strong></td><td>Production Scaling</td><td>4 weeks</td><td>Delta updates, sharding, edge batching, PMTiles</td><td>10,000+ concurrent users; &lt;500ms tick latency</td></tr>
+</table>
+
+<h3>15.1 Phase 1 Detailed Tasks</h3>
+
+<p>1. Extend <code>types.ts</code> with <code>Unit</code> interface and status taxonomy</p>
+<p>2. Update engine to synthesize per-unit telemetry each tick</p>
+<p>3. Build <code>UnitDetailPanel</code> component (wireframe SVG + metrics)</p>
+<p>4. Build <code>UnitList</code> horizontal scrollable component (bottom bar)</p>
+<p>5. Build <code>StatsView</code> with Recharts (5 charts: strength line, territory bar, mission donut, leaderboard table, network area)</p>
+<p>6. Build <code>PerformanceView</code> (per-operative metrics)</p>
+<p>7. Add status color system to <code>globals.css</code> and apply to status dots/badges</p>
+<p>8. Add <code>STATS</code> and <code>PERF</code> to NavRail registry</p>
+<p>9. Lint + browser-verify + commit as new checkpoint</p>
+
+<h3>15.2 Phase 2 Detailed Tasks</h3>
+
+<p>1. Configure NextAuth.js (credential provider, Operative model integration)</p>
+<p>2. Add session middleware to API routes</p>
+<p>3. Add <code>operativeId</code> to all actions (socket + REST)</p>
+<p>4. Create <code>StateSnapshot</code> Prisma model + migration</p>
+<p>5. Implement snapshot writer in engine (1/min)</p>
+<p>6. Build <code>ReplayView</code> with timeline scrubber</p>
+<p>7. Populate <code>WarLog</code> on mission completion</p>
+<p>8. Lint + browser-verify + commit as new checkpoint</p>
+
+<hr/>
+
+<h2>16. Success Metrics</h2>
+
+<h3>16.1 Product Metrics</h3>
+
+<table>
+<tr><th>Metric</th><th>Target</th><th>Measurement</th></tr>
+<tr><td>Daily active operatives</td><td>100,000+</td><td>Auth sessions per day</td></tr>
+<tr><td>Missions per day</td><td>1,000,000+</td><td>WarLog entries per day</td></tr>
+<tr><td>Territory flips per day</td><td>500+</td><td>Event log flips per day</td></tr>
+<tr><td>Average session duration</td><td>15+ min</td><td>Socket.io connection duration</td></tr>
+<tr><td>Replay usage</td><td>20% of users</td><td>Replay view opens / total users</td></tr>
+</table>
+
+<h3>16.2 Technical Metrics</h3>
+
+<table>
+<tr><th>Metric</th><th>Target</th><th>Measurement</th></tr>
+<tr><td>Uptime</td><td>99.9%</td><td>HTTP 200 on <code>/api/state</code></td></tr>
+<tr><td>Tick latency</td><td>&lt; 500ms</td><td>Engine tick → client render</td></tr>
+<tr><td>API error rate</td><td>&lt; 0.1%</td><td>Non-2xx responses / total</td></tr>
+<tr><td>Map tile cache hit rate</td><td>&gt; 90%</td><td>CDN cache hits / total tile requests</td></tr>
+<tr><td>Bundle size</td><td>&lt; 500KB gzipped</td><td>Production build output</td></tr>
+</table>
+
+<h3>16.3 Backup Integrity Metrics</h3>
+
+<table>
+<tr><th>Metric</th><th>Target</th><th>Measurement</th></tr>
+<tr><td>Backup freshness</td><td>&lt; 24h</td><td>Time since last bundle refresh</td></tr>
+<tr><td>Restore success rate</td><td>100%</td><td>Monthly restore drill</td></tr>
+<tr><td>Persistent storage availability</td><td>3/3 locations</td><td>All 3 mounts respond to <code>ls</code></td></tr>
+</table>
+
+<hr/>
+
+<h2>17. Risks &amp; Mitigations</h2>
+
+<table>
+<tr><th>Risk</th><th>Probability</th><th>Impact</th><th>Mitigation</th></tr>
+<tr><td>Engine crash loses in-memory state</td><td>Medium</td><td>High</td><td>Phase 2 adds snapshot persistence; engine restores from last snapshot on restart</td></tr>
+<tr><td>Esri rate-limits tile requests at scale</td><td>High</td><td>Medium</td><td>Phase 4 migrates to self-hosted PMTiles (no rate limit)</td></tr>
+<tr><td>MapLibre globe performance degrades with &gt;1000 markers</td><td>Medium</td><td>High</td><td>Clustering already implemented; Phase 1 adds viewport culling for units</td></tr>
+<tr><td>LLM API costs scale with users</td><td>High</td><td>Medium</td><td>Cache briefings per-tick (not per-user); fall back to heuristic for common states</td></tr>
+<tr><td>Single-process engine bottleneck</td><td>High</td><td>High</td><td>Phase 4 shards by territory; horizontal scaling</td></tr>
+<tr><td>Backup storage corruption</td><td>Low</td><td>Critical</td><td>3 independent persistent locations (2× OSS + PolarFS); all verified restorable</td></tr>
+<tr><td>Auth integration breaks existing single-operative flow</td><td>Medium</td><td>Medium</td><td>Guest mode preserved; feature flag for auth-required features</td></tr>
+</table>
+
+<hr/>
+
+<h2>18. Appendix</h2>
+
+<h3>18.1 File Inventory (142 tracked files)</h3>
+
+<table>
+<tr><th>Path</th><th>Purpose</th><th>Lines</th></tr>
+<tr><td><code>src/components/command/world-map.tsx</code></td><td>3D globe + all map layers</td><td>~1090</td></tr>
+<tr><td><code>mini-services/game-engine/index.ts</code></td><td>Authoritative game engine</td><td>895</td></tr>
+<tr><td><code>src/lib/types.ts</code></td><td>Shared domain types</td><td>257</td></tr>
+<tr><td><code>src/stores/command.ts</code></td><td>Zustand client store</td><td>112</td></tr>
+<tr><td><code>src/components/command/command-deck.tsx</code></td><td>Main UI shell</td><td>250</td></tr>
+<tr><td><code>src/app/api/ai/briefing/route.ts</code></td><td>LLM tactical briefing</td><td>165</td></tr>
+<tr><td><code>src/app/api/state/route.ts</code></td><td>Initial state proxy</td><td>19</td></tr>
+<tr><td><code>prisma/schema.prisma</code></td><td>Database schema</td><td>35</td></tr>
+<tr><td><code>RESTORE.sh</code></td><td>Backup restore script</td><td>171</td></tr>
+<tr><td><code>worklog.md</code></td><td>Development history</td><td>600+</td></tr>
+<tr><td><code>.githooks/pre-reset</code></td><td>Auto-backup hook</td><td>28</td></tr>
+<tr><td><code>.githooks/pre-commit</code></td><td>Bundle refresh hook</td><td>27</td></tr>
+</table>
+
+<h3>18.2 API Surface</h3>
+
+<table>
+<tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+<tr><td><code>/api/state</code></td><td>GET</td><td>Initial GameState snapshot (proxy to engine)</td></tr>
+<tr><td><code>/api/ai/briefing</code></td><td>POST</td><td>LLM tactical briefing</td></tr>
+<tr><td><code>/api/ai/outpost-briefing</code></td><td>POST</td><td>Per-outpost LLM assessment</td></tr>
+</table>
+
+<h3>18.3 Socket Events</h3>
+
+<table>
+<tr><th>Event</th><th>Direction</th><th>Payload</th></tr>
+<tr><td><code>state</code></td><td>Server → Client</td><td>Full <code>GameState</code> (every 2s)</td></tr>
+<tr><td><code>action</code></td><td>Client → Server</td><td><code>ClientAction</code> (launch-mission, place-outpost, upgrade-outpost, request-briefing)</td></tr>
+<tr><td><code>action-result</code></td><td>Server → Client</td><td><code>{ ok, error?, note? }</code></td></tr>
+</table>
+
+<h3>18.4 Glossary</h3>
+
+<ul><li><strong>ARIA</strong> — AI Reconnaissance &amp; Intelligence Advisor (the LLM co-pilot)</li>
+<li><strong>FANG / HAMMER / RESOLUTE</strong> — The three factions</li>
+<li><strong>FULL outpost</strong> — A full datacenter-grade node (high compute/health)</li>
+<li><strong>TACTICAL outpost</strong> — A browser-based worker node (lower compute)</li>
+<li><strong>SAFEHOUSE</strong> — A user-placed fortified node</li>
+<li><strong>Sol</strong> — Simulated "day" counter (game time)</li>
+<li><strong>VOTC</strong> — Network-universal currency</li>
+<li><strong>Tick</strong> — Engine game-loop cycle (2 seconds)</li>
+<li><strong>Territory</strong> — A named geographic region factions fight to control</li>
+<li><strong>Activity Ping</strong> — A transient live-action point (visualizes planet-scale activity)</li></ul>
+
+<hr/>
+
+<h2>19. Document Control</h2>
+
+<table>
+<tr><th>Field</th><th>Value</th></tr>
+<tr><td>Author</td><td>Z.ai Code</td></tr>
+<tr><td>Checkpoint</td><td><code>debd909</code></td></tr>
+<tr><td>Status</td><td>Final</td></tr>
+<tr><td>Next Review</td><td>After Phase 1 completion</td></tr>
+<tr><td>Distribution</td><td>Project team</td></tr>
+</table>
+
+
+</body>
+</html>
