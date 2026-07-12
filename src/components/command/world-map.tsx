@@ -3,9 +3,7 @@
 import * as React from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { feature } from "topojson-client";
-import type { FeatureCollection, Geometry, GeoJSON } from "geojson";
-import worldTopo from "world-atlas/countries-10m.json";
+import type { GeoJSON } from "geojson";
 import type {
   GameState,
   Outpost,
@@ -15,6 +13,14 @@ import type {
   ActivityPing,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  greatCircle,
+  greatCirclePoint,
+  geoCircle,
+  approxAngularDist,
+  formatTotalActions,
+} from "@/lib/map/geo";
+import { mapStyle, makeFactionIcon, type FactionShape } from "@/lib/map/style";
 
 // ---------------------------------------------------------------------------
 // PERFORMANCE / SCALING NOTES
@@ -28,233 +34,10 @@ import { cn } from "@/lib/utils";
 // cost stays bounded even with hundreds of moving pings.
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// World data (computed once at module scope)
-// ---------------------------------------------------------------------------
-const worldFeat = feature(
-  worldTopo as any,
-  (worldTopo as any).objects.countries
-) as unknown as FeatureCollection<Geometry>;
-
-/** Graticule line features every 15°. */
-function makeGraticule(step: number): GeoJSON.FeatureCollection {
-  const lines: GeoJSON.Feature[] = [];
-  for (let lng = -180; lng <= 180; lng += step) {
-    const coords: [number, number][] = [];
-    for (let lat = -85; lat <= 85; lat += 2) coords.push([lng, lat]);
-    lines.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-  }
-  for (let lat = -75; lat <= 75; lat += step) {
-    const coords: [number, number][] = [];
-    for (let lng = -180; lng <= 180; lng += 2) coords.push([lng, lat]);
-    lines.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-  }
-  return { type: "FeatureCollection", features: lines };
-}
-const graticuleFeat = makeGraticule(15);
-
-const oceanFeature: GeoJSON.Feature = {
-  type: "Feature",
-  properties: {},
-  geometry: { type: "Polygon", coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] },
-};
-
-// ---------------------------------------------------------------------------
-// Geo helpers
-// ---------------------------------------------------------------------------
-
-/** Spherical linear interpolation between two [lng,lat] points → great-circle arc. */
-function greatCircle(a: [number, number], b: [number, number], n = 48): [number, number][] {
-  const toCart = ([lng, lat]: [number, number]) => {
-    const rl = (lng * Math.PI) / 180, p = (lat * Math.PI) / 180;
-    return [Math.cos(p) * Math.cos(rl), Math.cos(p) * Math.sin(rl), Math.sin(p)];
-  };
-  const fromCart = ([x, y, z]: number[]) =>
-    [(Math.atan2(y, x) * 180) / Math.PI, (Math.asin(Math.max(-1, Math.min(1, z))) * 180) / Math.PI] as [number, number];
-  const ca = toCart(a), cb = toCart(b);
-  const dot = ca[0] * cb[0] + ca[1] * cb[1] + ca[2] * cb[2];
-  const omega = Math.acos(Math.min(1, Math.max(-1, dot)));
-  if (omega < 0.0001) return [a, b];
-  const sinO = Math.sin(omega);
-  const pts: [number, number][] = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    const k1 = Math.sin((1 - t) * omega) / sinO;
-    const k2 = Math.sin(t * omega) / sinO;
-    pts.push(fromCart([k1 * ca[0] + k2 * cb[0], k1 * ca[1] + k2 * cb[1], k1 * ca[2] + k2 * cb[2]]));
-  }
-  return pts;
-}
-
-/** Sample a point at fraction t (0..1) along a great-circle arc. */
-function greatCirclePoint(a: [number, number], b: [number, number], t: number): [number, number] {
-  const toCart = ([lng, lat]: [number, number]) => {
-    const rl = (lng * Math.PI) / 180, p = (lat * Math.PI) / 180;
-    return [Math.cos(p) * Math.cos(rl), Math.cos(p) * Math.sin(rl), Math.sin(p)];
-  };
-  const fromCart = ([x, y, z]: number[]) =>
-    [(Math.atan2(y, x) * 180) / Math.PI, (Math.asin(Math.max(-1, Math.min(1, z))) * 180) / Math.PI] as [number, number];
-  const ca = toCart(a), cb = toCart(b);
-  const dot = ca[0] * cb[0] + ca[1] * cb[1] + ca[2] * cb[2];
-  const omega = Math.acos(Math.min(1, Math.max(-1, dot)));
-  if (omega < 0.0001) return a;
-  const sinO = Math.sin(omega);
-  const k1 = Math.sin((1 - t) * omega) / sinO;
-  const k2 = Math.sin(t * omega) / sinO;
-  return fromCart([k1 * ca[0] + k2 * cb[0], k1 * ca[1] + k2 * cb[1], k1 * ca[2] + k2 * cb[2]]);
-}
-
-/** Geographic circle polygon (for territory halos). */
-function geoCircle(center: [number, number], radiusDeg: number, n = 48): GeoJSON.Polygon {
-  const [clng, clat] = center;
-  const pts: [number, number][] = [];
-  for (let i = 0; i <= n; i++) {
-    const brg = (i / n) * 2 * Math.PI;
-    const dLat = (radiusDeg * Math.cos(brg)) / 1.0;
-    const dLng = (radiusDeg * Math.sin(brg)) / Math.cos((clat * Math.PI) / 180);
-    pts.push([clng + dLng, clat + dLat]);
-  }
-  return { type: "Polygon", coordinates: [pts] };
-}
-
-/**
- * Equirectangular angular distance in degrees between two [lng,lat] points.
- * Cheap (no trig per-call beyond one cos) — used to cull pings outside the
- * visible hemisphere so we don't feed the renderer geometry that won't be seen.
- */
-function approxAngularDist(lng1: number, lat1: number, lng2: number, lat2: number): number {
-  // Wrap longitude difference to [-180, 180] so pings near the antimeridian
-  // are measured by the short way around, not the long way.
-  let dLngRaw = lng2 - lng1;
-  if (dLngRaw > 180) dLngRaw -= 360;
-  else if (dLngRaw < -180) dLngRaw += 360;
-  const dLng = dLngRaw * Math.cos(((lat1 + lat2) / 2) * Math.PI / 180);
-  const dLat = lat2 - lat1;
-  return Math.sqrt(dLat * dLat + dLng * dLng);
-}
-
-// ---------------------------------------------------------------------------
-// Faction sprite generation — canvas → ImageData → map.addImage
-// FANG = hexagon ⬡, HAMMER = diamond ◆, RESOLUTE = square ■
-// Rendered as white monochrome shapes on transparent background.
-// ---------------------------------------------------------------------------
-function makeFactionIcon(shape: "hex" | "diamond" | "square"): { width: number; height: number; data: Uint8ClampedArray } {
-  const S = 48; // canvas size
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = S;
-  const ctx = canvas.getContext("2d")!;
-  ctx.translate(S / 2, S / 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#ffffff";
-  const r = S * 0.32; // shape radius
-
-  ctx.beginPath();
-  if (shape === "hex") {
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 2;
-      const x = r * Math.cos(a);
-      const y = r * Math.sin(a);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  } else if (shape === "diamond") {
-    ctx.moveTo(0, -r);
-    ctx.lineTo(r, 0);
-    ctx.lineTo(0, r);
-    ctx.lineTo(-r, 0);
-    ctx.closePath();
-  } else {
-    // square
-    ctx.rect(-r * 0.82, -r * 0.82, r * 1.64, r * 1.64);
-  }
-  ctx.fill();
-
-  const img = ctx.getImageData(0, 0, S, S);
-  return { width: S, height: S, data: img.data };
-}
-
-const FACTION_ICON: Record<FactionId, "hex" | "diamond" | "square"> = {
+const FACTION_ICON: Record<FactionId, FactionShape> = {
   FANG: "hex",
   HAMMER: "diamond",
   RESOLUTE: "square",
-};
-
-// ---------------------------------------------------------------------------
-// Monochrome map style — REAL 1:1 Earth base + stylized tactical overlay
-// ---------------------------------------------------------------------------
-// Base layer: Esri World Imagery (free satellite raster tiles, no API key).
-//   This is TRUE 1:1 geography — actual satellite photography of every
-//   coastline, island, road, and city on Earth. Equivalent to Google Earth
-//   imagery but served as lightweight raster tiles (no server stack needed).
-//   We desaturate + darken it via native MapLibre raster paint properties to
-//   produce a "night-vision tactical satellite" base that fits the monochrome
-//   aesthetic without breaking the wargame mood.
-//
-// Overlay: Natural Earth 10m vector coastlines/borders on top (the stylized
-//   white-line look), plus the runtime gameplay layers (territories, outposts,
-//   pings, missions, safehouses) added after map load.
-//
-// PRODUCTION SCALING NOTE: For millions of users, swap the Esri endpoint for a
-//   self-hosted Protomaps PMTiles file (single static file, OSM vector tiles,
-//   no per-request cost, scales via CDN). The `sources.satellite` entry below
-//   is the only line that needs to change.
-const esriWorldImagery = {
-  type: "raster" as const,
-  tiles: [
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-  ],
-  tileSize: 256,
-  attribution: "Esri, Maxar, Earthstar Geographics",
-  maxzoom: 19,
-};
-
-const mapStyle: maplibregl.StyleSpecification = {
-  version: 8,
-  projection: { type: "globe" } as any,
-  sources: {
-    // Real 1:1 satellite Earth (raster tiles — no server, no API key)
-    satellite: esriWorldImagery,
-    world: { type: "geojson", data: worldFeat as unknown as GeoJSON.GeoJSON },
-    ocean: { type: "geojson", data: { type: "FeatureCollection", features: [oceanFeature] } },
-    graticule: { type: "geojson", data: graticuleFeat as unknown as GeoJSON.GeoJSON },
-  },
-  layers: [
-    // --- BASE: real satellite Earth, desaturated + darkened to monochrome tactical ---
-    {
-      id: "satellite-base",
-      type: "raster",
-      source: "satellite",
-      paint: {
-        "raster-opacity": 1.0,
-        // Partial desaturate → near-grayscale but keeps faint land/water tonal separation
-        "raster-saturation": -0.85,
-        // Keep brightness readable — the satellite must stay visible under the tactical UI
-        "raster-brightness-min": 0,
-        "raster-brightness-max": 0.85,
-        // Gentle contrast bump so land/water separation reads
-        "raster-contrast": 0.15,
-        // Slight hue rotate is a no-op on grayscale but keeps the pipeline honest
-        "raster-hue-rotate": 0,
-      },
-    },
-    // Deep-black ocean tint — VERY low opacity so the satellite shows through
-    // but the void-space feel is preserved. (Cannot mask ocean-only with a
-    // single rect polygon, so keep this subtle.)
-    { id: "ocean-fill", type: "fill", source: "ocean", paint: { "fill-color": "#000000", "fill-opacity": 0.10 } },
-    { id: "graticule", type: "line", source: "graticule", paint: { "line-color": "#fff", "line-opacity": 0.06, "line-width": 0.4 } },
-    // Landmass fill — faint white wash so continents read as "ours" not "photo"
-    { id: "countries-fill", type: "fill", source: "world", paint: {
-      "fill-color": "#fff",
-      "fill-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.03, 3, 0.03, 6, 0.03],
-    } },
-    // Coastlines + borders — white vector lines on top of the satellite for the
-    // stylized tactical-map look. Zoom-responsive width.
-    { id: "countries-line", type: "line", source: "world", paint: {
-      "line-color": "#fff",
-      "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.45, 3, 0.55, 6, 0.70],
-      "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 2, 0.8, 4, 1.2, 6, 1.8, 8, 2.4],
-    } },
-  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -434,14 +217,6 @@ function missionImpactsToGeoJSON(missions: Mission[], outposts: Outpost[]): GeoJ
     });
   }
   return { type: "FeatureCollection", features };
-}
-
-/** Format total actions with K/M/B suffixes for the HUD readout. */
-function formatTotalActions(n: number): string {
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return String(n);
 }
 
 // ---------------------------------------------------------------------------
