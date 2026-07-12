@@ -84,3 +84,8 @@ upload/42-pre-reset-*.bundle
 42-checkpoint.tar.gz
 42-pre-reset-*.bundle
 backups/
+# === Sandbox artifacts — never commit (defensive) ===
+/tool-results/
+*.pid
+upload/*.bundle
+upload/*.tar.gz
