@@ -166,11 +166,10 @@ export interface Briefing {
 // for intra-faction upgrades, build-point conversion, and tribute.
 export const NETWORK_CURRENCY = "VOTC" as const;
 
-export const FACTION_TOKEN: Record<FactionId, string> = {
-  FANG: "FANG",
-  HAMMER: "HAMMER",
-  RESOLUTE: "RESOLUTE",
-};
+// Faction constants (FACTION_META, FACTION_TOKEN, etc.) now live in
+// @/lib/factions — the single source of truth. Re-exported here for backward
+// compatibility with existing imports from @/lib/types.
+export { FACTION_TOKEN, FACTION_META } from "@/lib/factions";
 
 export interface GameState {
   tick: number;
@@ -249,8 +248,4 @@ export const MISSION_META: Record<
   },
 };
 
-export const FACTION_META: Record<FactionId, { name: string; motto: string }> = {
-  FANG: { name: "FANG", motto: "Hunt as one." },
-  HAMMER: { name: "HAMMER", motto: "Forge. Strike. Endure." },
-  RESOLUTE: { name: "RESOLUTE", motto: "Steadfast, vigilant." },
-};
+// FACTION_META is re-exported from @/lib/factions (see above, near FACTION_TOKEN).

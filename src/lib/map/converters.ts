@@ -12,14 +12,11 @@ import type {
   Territory,
   ActivityPing,
 } from "@/lib/types";
-import type { FactionShape } from "@/lib/map/style";
 import { greatCircle, greatCirclePoint, geoCircle, approxAngularDist } from "@/lib/map/geo";
+import { FACTION_ICON } from "@/lib/factions";
 
-export const FACTION_ICON: Record<FactionId, FactionShape> = {
-  FANG: "hex",
-  HAMMER: "diamond",
-  RESOLUTE: "square",
-};
+// Re-export so existing imports from @/lib/map/converters keep working.
+export { FACTION_ICON };
 
 /** Outposts → GeoJSON points with rich properties for data-driven styling. */
 export function outpostsToGeoJSON(outposts: Outpost[], operativeFaction: FactionId, selectedId: string | null): GeoJSON.FeatureCollection {

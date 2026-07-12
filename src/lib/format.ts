@@ -1,5 +1,15 @@
 import type { FactionId, Outpost, ThreatLevel } from "@/lib/types";
 
+// Faction constants (FACTION_MARK_GLYPH, FACTION_OUTPOST_NUMBER, outpostNumber,
+// outpostNumberStr) now live in @/lib/factions — re-exported here for backward
+// compatibility with existing imports from @/lib/format.
+export {
+  FACTION_MARK_GLYPH,
+  FACTION_OUTPOST_NUMBER,
+  outpostNumber,
+  outpostNumberStr,
+} from "@/lib/factions";
+
 export function fmtUptime(ms: number): string {
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
@@ -23,36 +33,10 @@ export const THREAT_META: Record<ThreatLevel, { label: string; pip: string; puls
   BLACK: { label: "BLACK", pip: "pip--crit" },
 };
 
-export const FACTION_MARK_GLYPH: Record<FactionId, string> = {
-  FANG: "⬡",
-  HAMMER: "◆",
-  RESOLUTE: "■",
-};
+// FACTION_MARK_GLYPH + outpost helpers re-exported from @/lib/factions (see top).
 
 export function outpostGlyph(o: Outpost): string {
   return FACTION_MARK_GLYPH[o.faction];
-}
-
-/**
- * Per-faction command-node outpost designation number.
- * FANG → 33, HAMMER → 21, RESOLUTE → 07.
- * These are the canonical "home outpost" numbers shown in the brand badge
- * and the outpost detail card header.
- */
-export const FACTION_OUTPOST_NUMBER: Record<FactionId, number> = {
-  FANG: 33,
-  HAMMER: 21,
-  RESOLUTE: 7,
-};
-
-/** Raw outpost designation number for a faction (e.g. 33, 21, 7). */
-export function outpostNumber(faction: FactionId): number {
-  return FACTION_OUTPOST_NUMBER[faction];
-}
-
-/** Zero-padded 2-digit outpost designation string (e.g. "33", "21", "07"). */
-export function outpostNumberStr(faction: FactionId): string {
-  return FACTION_OUTPOST_NUMBER[faction].toString().padStart(2, "0");
 }
 
 export function pct(n: number, d = 100): string {

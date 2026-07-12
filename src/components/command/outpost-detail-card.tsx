@@ -16,15 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useSfx } from "@/hooks/use-sfx";
 import { Crosshair, Zap, Eye, Shield, Satellite, Hammer, X, Radio, Loader2 } from "lucide-react";
-
-/**
- * Faction logo paths.
- */
-const FACTION_LOGO: Record<FactionId, string> = {
-  FANG: "/fang-logo.jpg",
-  HAMMER: "/hammer-logo.jpg",
-  RESOLUTE: "/resolute-logo.jpg",
-};
+import { FACTION_LOGO } from "@/lib/factions";
 
 /**
  * Priority → badge styling (monochrome intensity).

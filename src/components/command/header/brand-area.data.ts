@@ -1,5 +1,6 @@
 import { useCommand } from "@/stores/command";
 import type { FactionId } from "@/lib/types";
+import { FACTION_LOGO } from "@/lib/factions";
 
 /**
  * useBrandData — data source for the BrandArea header component.
@@ -20,15 +21,9 @@ export interface BrandData {
   factionLogo: string;
 }
 
-const FACTION_LOGOS: Record<FactionId, string> = {
-  FANG: "/fang-logo.jpg",
-  HAMMER: "/hammer-logo.jpg",
-  RESOLUTE: "/resolute-logo.jpg",
-};
-
 export function useBrandData(): BrandData | null {
   const state = useCommand((s) => s.state);
   if (!state) return null;
   const { faction } = state.operative;
-  return { faction, factionLogo: FACTION_LOGOS[faction] };
+  return { faction, factionLogo: FACTION_LOGO[faction] };
 }
