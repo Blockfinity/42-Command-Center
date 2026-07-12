@@ -882,3 +882,51 @@ Stage Summary:
 - Bar still fills 0 → 100% (fixed in BOOT-1), sound still works (fixed in BOOT-1).
 - Full cinematic flow: idle (clean) → click → panel reveal + streaming lines +
   ticks → 100% + powerOn sweep → command deck.
+
+---
+Task ID: MAP-1
+Agent: main (Z.ai Code)
+Task: When the operative clicks on empty map area (outside any outpost/cluster), the world globe should reset its position and axis (center, zoom, bearing, pitch) back to the boot camera.
+
+Work Log:
+- Added `initialCameraRef` to world-map.tsx — stores the home camera (center,
+  zoom=1.6, bearing=0, pitch=0) computed once at map init from the operative's
+  FULL outpost (fallback [-32, 8]). Refs let the click handler (registered
+  once inside the init effect) always read the same home view without
+  re-binding.
+- Refactored map init to extract INITIAL_ZOOM / INITIAL_BEARING / INITIAL_PITCH
+  constants (used both in the Map constructor and in the ref) so the reset
+  target is always in sync with the boot camera.
+- Rewrote the generic `map.on("click")` handler (previously only active in
+  placement mode):
+  • Queries queryRenderedFeatures at the click point for outpost/cluster layers.
+    If any feature is hit, returns early (layer-specific handlers already
+    called preventDefault, but this is a belt-and-suspenders guard).
+  • Placement mode → forwards clicked coord to parent (unchanged behavior).
+  • Empty-ocean click (not placing) → reset: set lastInteractRef (pauses
+    auto-rotate for 3.5s), deselect any outpost (onSelect(null)), then
+    easeTo the home camera over 900ms.
+- Diagnosed a critical MapLibre quirk during testing: calling `map.stop()`
+  immediately before `map.easeTo()` in the same synchronous tick PREVENTS the
+  ease from starting. Verified via direct eval: `stop(); easeTo();` → no
+  animation; `easeTo();` alone → works. Removed the `map.stop()` call. The
+  `lastInteractRef = now` is sufficient to pause the auto-rotate loop (which
+  uses per-frame jumpTo that would otherwise cancel the easeTo) for the
+  900ms duration.
+- Verified via Agent Browser with REAL user interactions (not eval-injected
+  camera changes):
+  • Boot → deck loads at home (z=1.6, b=0, p=0, c=[-74,40.71]).
+  • Drag-pan (left-drag), scroll-zoom in, drag-rotate (right-drag) → camera
+    heavily altered (z=0.64, b=-166, p=60, c=[-145.9,67.08]).
+  • Click empty ocean → eases back to home (z=1.6, b=0, p=0, c=[-74,40.71]).
+  • Confirmed reliable across multiple full-reload runs.
+  • No console errors, no runtime errors, lint clean.
+
+Stage Summary:
+- Clicking empty map area (outside outposts/clusters) now resets the globe to
+  its boot position + axis (center, zoom, bearing, pitch) via a 900ms ease.
+- Clicking an outpost/cluster still selects/zooms (layer handlers intercept
+  via preventDefault; queryRenderedFeatures is a backup guard).
+- Placement mode (Deploy Outpost) still forwards the clicked coord — unchanged.
+- Key gotcha documented inline: do NOT call map.stop() before easeTo in the
+  same tick (MapLibre quirk prevents the ease from starting).

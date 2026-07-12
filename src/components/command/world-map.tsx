@@ -466,6 +466,16 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
   const placementRef = React.useRef(placementMode);
   const onSelectRef = React.useRef(onSelect);
   const onMapClickRef = React.useRef(onMapClick);
+  // Initial camera (computed once at map init) — used by the "click empty map
+  // to reset world position + axis" handler. Stored in a ref so the click
+  // handler (registered once inside the init effect) always reads the same
+  // home view without re-binding.
+  const initialCameraRef = React.useRef<{
+    center: [number, number];
+    zoom: number;
+    bearing: number;
+    pitch: number;
+  } | null>(null);
   const activityPingsRef = React.useRef<ActivityPing[]>(state.activityPings ?? []);
   const missionsRef = React.useRef(state.missions);
   const outpostsRef = React.useRef(state.outposts);
@@ -500,15 +510,26 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
       (o) => o.faction === state.operative.faction && o.type === "FULL"
     );
     const center: [number, number] = mine ? [mine.lng, mine.lat] : [-32, 8];
+    const INITIAL_ZOOM = 1.6;
+    const INITIAL_BEARING = 0;
+    const INITIAL_PITCH = 0;
+    // Stash the home camera so the "click empty map → reset" handler can
+    // ease back to exactly the view the operative booted into.
+    initialCameraRef.current = {
+      center,
+      zoom: INITIAL_ZOOM,
+      bearing: INITIAL_BEARING,
+      pitch: INITIAL_PITCH,
+    };
 
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: mapStyle,
       center,
-      zoom: 1.6,
+      zoom: INITIAL_ZOOM,
       maxZoom: 8,
       minZoom: 0,
-      bearing: 0,
+      bearing: INITIAL_BEARING,
       attributionControl: false,
       dragRotate: true,
       scrollZoom: true,
@@ -918,15 +939,42 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
         });
       });
 
-      // Click on empty map → placement mode
+      // Click on empty map → either place an outpost (placement mode) or
+      // reset the world back to its home position + axis (bearing/pitch).
       map.on("click", (e: maplibregl.MapMouseEvent) => {
-        if (!placementRef.current) return;
-        // If the click hit an outpost/cluster layer, skip placement
+        // Layer-specific handlers (outpost-shape / health-ring / clusters)
+        // call e.preventDefault() when they handle a hit, which stops this
+        // map-level handler from firing. We still query as a belt-and-
+        // suspenders guard so a click on any outpost/cluster never resets.
         const feats = map.queryRenderedFeatures(e.point, {
           layers: ["outpost-shape", "outpost-health-ring", "outpost-clusters"],
         });
         if (feats.length > 0) return;
-        onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
+
+        if (placementRef.current) {
+          // Deploy-outpost mode → forward the clicked coord to the parent
+          onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
+          return;
+        }
+
+        // Empty-ocean click (not placing) → reset world position + axis.
+        // Ease center/zoom/bearing/pitch back to the boot camera and dismiss
+        // any selected outpost. Setting lastInteractRef pauses the auto-rotate
+        // loop for 3.5s — more than enough cover for the 900ms ease, so the
+        // globe doesn't fight the reset with its own per-frame jumpTo.
+        // NOTE: do NOT call map.stop() here — calling stop() in the same tick
+        // as easeTo prevents the ease from starting (MapLibre quirk).
+        const cam = initialCameraRef.current;
+        if (!cam) return;
+        lastInteractRef.current = performance.now();
+        onSelectRef.current(null);
+        map.easeTo({
+          center: cam.center,
+          zoom: cam.zoom,
+          bearing: cam.bearing,
+          pitch: cam.pitch,
+          duration: 900,
+        });
       });
 
       // Hover cursor
