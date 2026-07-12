@@ -16,32 +16,32 @@ const FACTION_WALLPAPER: Record<FactionId, string> = {
 
 // ── Boot sequence ─────────────────────────────────────────────────────────
 //
-// Two phases:
-//   1. BOOT (silent, pre-click) — firmware/hardware init. ~1.6s.
-//      Bar fills 0 → ~46%. Button stays disabled until complete.
-//      No sound (browsers block audio before user gesture).
+// Single-phase design (per user request):
+//   • IDLE (pre-click) — only the title, subtitle, and "ESTABLISH UPLINK"
+//     button are shown. The terminal box + progress bar are HIDDEN until
+//     the operative clicks. The button is enabled immediately (no
+//     "INITIALIZING..." gate).
 //
-//   2. UPLINK (with sound, post-click) — VirtuCorp + AORDF handshake. ~1.8s.
-//      Bar fills ~46 → 100%. Each line plays a deep "boot" tick.
-//      Final line plays a "powerOn" rising sweep.
-//      onConnect() is called immediately on click so the parent can start
-//      fetching state in parallel; the terminal sequence plays on top.
+//   • CONNECTING (post-click) — the terminal box + progress bar fade in,
+//     then the full boot sequence streams line-by-line. Each line plays a
+//     deep "boot" tick. The bar fills 0 → 100% as lines print.
 //
-// Implementation note: we use a counter + setTimeout-per-render pattern
-// (NOT setInterval). Each render schedules exactly one timeout; React's
-// cleanup cancels it when the counter changes. This is immune to React
-// Strict Mode double-invocation — no duplicated or skipped lines.
+//   • DONE — when the last line prints, a "powerOn" rising sweep plays,
+//     the button flips to "UPLINK ESTABLISHED", and after a short beat
+//     onConnect() fires so the parent loads the command deck.
+//
+// All audio happens after the user gesture, so browser autoplay policies
+// are satisfied.
+//
+// Implementation note: counter + setTimeout-per-render pattern (NOT
+// setInterval). Each render schedules exactly one timeout; React's cleanup
+// cancels it when the counter changes. Immune to Strict Mode double-mount.
 
-const BOOT_LINES: string[] = [
+const BOOT_SEQUENCE: string[] = [
   "VIRTUCORP SECURE TERMINAL · v4.2.1",
   "▸ Booting operative firmware [OK]",
-  "▸ Mounting /dev/akkadia0 [OK]",
-  "▸ Tactical overlay modules [LOADED]",
   "▸ ARIA cognitive core [READY]",
   "▸ Operative biometrics [VERIFIED]",
-];
-
-const UPLINK_LINES: string[] = [
   "▸ ESTABLISHING SECURE UPLINK",
   "▸ Requesting AORDF authentication token [GRANTED]",
   "▸ Synchronizing with VirtuCorp servers [SYNCED]",
@@ -51,8 +51,8 @@ const UPLINK_LINES: string[] = [
   "▸ UPLINK ESTABLISHED",
 ];
 
-const TOTAL_LINES = BOOT_LINES.length + UPLINK_LINES.length;
-const LINE_INTERVAL = 260; // ms per line
+const TOTAL_LINES = BOOT_SEQUENCE.length;
+const LINE_INTERVAL = 240; // ms per line
 
 export function BootScreen({
   onConnect,
@@ -64,9 +64,11 @@ export function BootScreen({
   faction: FactionId;
 }) {
   const sfx = useSfx();
-  const [phase, setPhase] = React.useState<"boot" | "uplink">("boot");
-  const [bootCount, setBootCount] = React.useState(0);
-  const [uplinkCount, setUplinkCount] = React.useState(0);
+  // NOTE: `phase` stays "connecting" through completion. We use a separate
+  // `done` flag (NOT a phase change) so the done-effect's deps don't change
+  // — otherwise React's cleanup would cancel the onConnect timeout.
+  const [phase, setPhase] = React.useState<"idle" | "connecting">("idle");
+  const [lineCount, setLineCount] = React.useState(0);
   const [done, setDone] = React.useState(false);
 
   const termRef = React.useRef<HTMLDivElement>(null);
@@ -81,72 +83,56 @@ export function BootScreen({
   React.useEffect(() => { sfxRef.current = sfx; });
   React.useEffect(() => { onConnectRef.current = onConnect; });
 
-  // ── Phase 1: BOOT — increment bootCount until all BOOT_LINES printed ───
+  // ── Stream boot lines one-by-one with a tick per line ──────────────────
   React.useEffect(() => {
-    if (phase !== "boot" || bootCount >= BOOT_LINES.length) return;
-    const timer = setTimeout(() => setBootCount((c) => c + 1), LINE_INTERVAL);
-    return () => clearTimeout(timer);
-  }, [phase, bootCount]);
-
-  // ── Phase 2: UPLINK — increment uplinkCount with sound ────────────────
-  React.useEffect(() => {
-    if (phase !== "uplink" || uplinkCount >= UPLINK_LINES.length) return;
+    if (phase !== "connecting" || lineCount >= TOTAL_LINES) return;
     const timer = setTimeout(() => {
-      setUplinkCount((c) => c + 1);
+      setLineCount((c) => c + 1);
       sfxRef.current.play("boot");
     }, LINE_INTERVAL);
     return () => clearTimeout(timer);
-  }, [phase, uplinkCount]);
+  }, [phase, lineCount]);
 
-  // ── Mark done + play powerOn sweep when UPLINK completes ──────────────
-  // Then call onConnect() so the parent starts the socket + state fetch.
-  // Delaying onConnect until the boot sequence finishes ensures the user
-  // sees the full cinematic (bar → 100%, powerOn sweep) before the deck loads.
+  // ── When the last line prints: play powerOn sweep, mark done, fire onConnect
   React.useEffect(() => {
-    if (phase === "uplink" && uplinkCount >= UPLINK_LINES.length && !firedRef.current) {
+    if (phase === "connecting" && lineCount >= TOTAL_LINES && !firedRef.current) {
       firedRef.current = true;
       setDone(true);
       sfxRef.current.play("powerOn");
-      const t = setTimeout(() => onConnectRef.current(), 350);
+      const t = setTimeout(() => onConnectRef.current(), 420);
       return () => clearTimeout(t);
     }
-  }, [phase, uplinkCount]);
+  }, [phase, lineCount]);
 
   // Auto-scroll terminal to bottom when lines change
-  const lines = [
-    ...BOOT_LINES.slice(0, bootCount),
-    ...UPLINK_LINES.slice(0, uplinkCount),
-  ];
-
   React.useEffect(() => {
     if (termRef.current) {
       termRef.current.scrollTop = termRef.current.scrollHeight;
     }
-  }, [bootCount, uplinkCount]);
+  }, [lineCount]);
 
-  const bootReady = phase === "boot" && bootCount >= BOOT_LINES.length;
-  const progress = Math.min(100, Math.round((lines.length / TOTAL_LINES) * 100));
+  const lines = BOOT_SEQUENCE.slice(0, lineCount);
+  const progress = Math.min(100, Math.round((lineCount / TOTAL_LINES) * 100));
+  const showPanel = phase !== "idle"; // box + bar appear only after click
 
   function handleClick() {
-    if (!bootReady || phase === "uplink") return;
+    if (phase !== "idle" || bootError) return;
     sfx.resume();
     sfx.play("transition");
-    setPhase("uplink");
-    // onConnect() is called by the done-effect after the UPLINK sequence
-    // completes, so the full boot animation + powerOn sweep play first.
+    setPhase("connecting");
+    // onConnect() is called by the done-effect after the boot sequence
+    // completes, so the full cinematic + powerOn sweep play first.
   }
 
   // Button label + state
   const buttonLabel = bootError
     ? "RETRY UPLINK"
-    : phase === "uplink"
-      ? done
-        ? "UPLINK ESTABLISHED"
-        : "ESTABLISHING UPLINK..."
-      : bootReady
-        ? "ESTABLISH UPLINK"
-        : "INITIALIZING...";
-  const buttonDisabled = !bootReady || phase === "uplink" || bootError;
+    : done
+      ? "UPLINK ESTABLISHED"
+      : phase === "connecting"
+        ? "ESTABLISHING UPLINK..."
+        : "ESTABLISH UPLINK";
+  const buttonDisabled = phase !== "idle" || bootError;
 
   return (
     <div className="boot-content-in vignette absolute inset-0 z-50 flex flex-col items-center justify-center bg-black scanlines">
@@ -181,48 +167,53 @@ export function BootScreen({
           )}
         </div>
 
-        {/* progress bar + percentage counter */}
-        <div className="flex items-center gap-3">
-          <div className="h-px w-56 overflow-hidden bg-white/15 sm:w-72">
-            <div
-              className="h-full bg-white/70 transition-[width] duration-200 ease-out"
-              style={{
-                width: `${progress}%`,
-                boxShadow: "0 0 6px oklch(1 0 0 / 0.6)",
-              }}
-            />
-          </div>
-          <span className="font-mono text-[10px] tabular-nums text-white/60">
-            {progress.toString().padStart(3, "0")}%
-          </span>
-        </div>
-
-        {/* terminal log pane */}
-        <div
-          ref={termRef}
-          className="boot-terminal thin-scroll h-[132px] w-[min(90vw,420px)] overflow-y-auto border border-white/15 bg-white/[0.02] p-3 text-left backdrop-blur-sm"
-        >
-          <div className="font-mono text-[10px] leading-[1.7] text-white/55">
-            {lines.map((line, i) => {
-              const isLast = i === lines.length - 1;
-              return (
+        {/* terminal log pane + progress bar — hidden until ESTABLISH UPLINK is clicked */}
+        {showPanel && (
+          <div className="boot-panel-in flex w-[min(90vw,420px)] flex-col gap-3">
+            {/* progress bar + percentage counter */}
+            <div className="flex items-center gap-3">
+              <div className="h-px w-full overflow-hidden bg-white/15">
                 <div
-                  key={i}
-                  className={
-                    isLast && done
-                      ? "boot-line-in whitespace-pre-wrap text-white/90"
-                      : "boot-line-in whitespace-pre-wrap"
-                  }
-                >
-                  {line}
-                </div>
-              );
-            })}
-            {!done && (
-              <span className="boot-cursor inline-block text-white/80">▌</span>
-            )}
+                  className="h-full bg-white/70 transition-[width] duration-200 ease-out"
+                  style={{
+                    width: `${progress}%`,
+                    boxShadow: "0 0 6px oklch(1 0 0 / 0.6)",
+                  }}
+                />
+              </div>
+              <span className="font-mono text-[10px] tabular-nums text-white/60">
+                {progress.toString().padStart(3, "0")}%
+              </span>
+            </div>
+
+            {/* terminal log pane */}
+            <div
+              ref={termRef}
+              className="boot-terminal thin-scroll h-[132px] w-full overflow-y-auto border border-white/15 bg-white/[0.02] p-3 text-left backdrop-blur-sm"
+            >
+              <div className="font-mono text-[10px] leading-[1.7] text-white/55">
+                {lines.map((line, i) => {
+                  const isLast = i === lines.length - 1;
+                  return (
+                    <div
+                      key={i}
+                      className={
+                        isLast && done
+                          ? "boot-line-in whitespace-pre-wrap text-white/90"
+                          : "boot-line-in whitespace-pre-wrap"
+                      }
+                    >
+                      {line}
+                    </div>
+                  );
+                })}
+                {!done && (
+                  <span className="boot-cursor inline-block text-white/80">▌</span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* CTA */}
         <button

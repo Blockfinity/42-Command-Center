@@ -831,3 +831,54 @@ Stage Summary:
 - Progress bar fills 0→100% (was stuck at 88%).
 - Sound: deep "boot" tick per UPLINK line + "transition" sweep on click + "powerOn" rising sweep on completion (was a single inaudible 60ms blip).
 - Two-phase design: BOOT (silent, pre-click) → UPLINK (with sound, post-click) → command deck.
+
+---
+Task ID: BOOT-2
+Agent: main (Z.ai Code)
+Task: Hide the terminal box + progress bar until the operative clicks "ESTABLISH UPLINK" (previously they appeared during a silent pre-click BOOT phase).
+
+Work Log:
+- Restructured boot-screen.tsx from a two-phase (BOOT pre-click / UPLINK post-click)
+  design into a single post-click sequence:
+  • IDLE (pre-click): only the "42" title, subtitle, and "ESTABLISH UPLINK"
+    button are rendered. Button is enabled immediately (no "INITIALIZING..."
+    gate). Terminal box + progress bar are NOT in the DOM.
+  • CONNECTING (post-click): the terminal box + progress bar fade in via a new
+    `.boot-panel-in` animation (0.28s ease-out, fade + 6px lift), then the full
+    11-line boot sequence streams line-by-line (240ms/line) with a deep "boot"
+    tick per line. Bar fills 0 → 100% as lines print.
+  • DONE: powerOn rising sweep plays, button flips to "UPLINK ESTABLISHED",
+    then onConnect() fires after 420ms so the parent loads the command deck.
+- Merged the old BOOT_LINES (6 firmware lines) + UPLINK_LINES (7 handshake
+  lines) into a single BOOT_SEQUENCE (11 lines) that all play post-click.
+  Curated order: firmware init → AORDF/VirtuCorp handshake → UPLINK ESTABLISHED.
+- Fixed a critical React effect-cleanup bug introduced in the first pass:
+  the done-effect called setPhase("done"), which changed `phase` (in the
+  effect's dep array). React then re-ran the effect, whose cleanup cleared
+  the onConnect setTimeout — so onConnect never fired and the deck never
+  loaded (screen stuck on "UPLINK ESTABLISHED").
+  Fix: keep `phase` as "connecting" through completion; use a separate `done`
+  boolean for the done visual state (mirrors the original BOOT-1 pattern).
+  Since setDone(true) doesn't change phase or lineCount, the effect deps
+  don't change → cleanup doesn't fire → onConnect timeout survives.
+- Added `.boot-panel-in` keyframe + class to globals.css (fade + translateY).
+- Updated all `phase === "done"` references → `done` boolean (button label,
+  last-line highlight, cursor visibility).
+- Verified via Agent Browser + VLM:
+  • IDLE: VLM confirms "No terminal/log box or progress bar is visible" —
+    only 42 title, subtitle, ESTABLISH UPLINK button, faction wallpaper.
+  • Mid-sequence (~900ms): terminal box + bar visible, bar at 45%, lines
+    streaming (VIRTUCORP SECURE TERMINAL, Booting operative firmware, etc.).
+  • End (~2.7s): VLM confirms bar at 100%, terminal shows "UPLINK ESTABLISHED",
+    button shows "UPLINK ESTABLISHED".
+  • Post-transition: command deck loads — satellite Earth globe visible,
+    nav rail (Orbital Map, Discovery Feed, Strike Console, ...), status
+    panels (ACTIVE NODES, THREAT LEVEL RED, etc.), GET /api/state 200.
+  • No console errors, no runtime errors, lint clean.
+
+Stage Summary:
+- Terminal box + progress bar now hidden until "ESTABLISH UPLINK" is clicked.
+- Button is immediately clickable (no disabled "INITIALIZING..." phase).
+- Bar still fills 0 → 100% (fixed in BOOT-1), sound still works (fixed in BOOT-1).
+- Full cinematic flow: idle (clean) → click → panel reveal + streaming lines +
+  ticks → 100% + powerOn sweep → command deck.

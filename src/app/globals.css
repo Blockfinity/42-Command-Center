@@ -286,6 +286,15 @@
   z-index: 1;
 }
 
+/* Panel (terminal box + progress bar) reveal — fades + lifts in when the
+   operative clicks ESTABLISH UPLINK. Kept short so the first line prints
+   almost immediately after the panel appears. */
+@keyframes boot-panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.boot-panel-in { animation: boot-panel-in 0.28s ease-out both; }
+
 /* Terminal line fade-in — quick slide + opacity for a "printing" feel. */
 @keyframes boot-line-in {
   from { opacity: 0; transform: translateX(-4px); }
