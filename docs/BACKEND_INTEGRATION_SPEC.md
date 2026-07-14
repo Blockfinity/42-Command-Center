@@ -77,45 +77,88 @@ Placement is authorized only when all three conditions hold. The frontend **neve
 
 **Action:** The mock seed data faction HQs (Fang Prime, Hammer Forge, Resolute Stand, etc., currently `type: "FULL"`) get removed. The `OutpostType` enum becomes `"SAFEHOUSE" | "TACTICAL"` only — `"FULL"` is removed entirely (per lock 22).
 
-### 2.6 User identity flow (locked)
+### 2.6 Terminology — CORRECTED (locked)
+
+The previous version of this spec conflated "codename" and "faction". The correct terminology is:
+
+| Term | What it is | Who assigns | Fixed? |
+|---|---|---|---|
+| **Outpost** | Top-level group (3 exist: #33 FANG, #21 HAMMER, #7 RESOLUTE; more added as story progresses) | System (story-driven) | Yes, per outpost |
+| **Outpost number** | 33, 21, 7 (identifier of the outpost) | System | Yes |
+| **Faction name** | FANG, HAMMER, RESOLUTE (the outpost's faction name) | System | Yes |
+| **Moniker** | User's personal username/handle | User, on AORDF | Fixed once chosen |
+| **Safehouse name** | User's chosen name for their placed Safehouse | User, at placement | User-chosen |
+
+A user's full identity = **moniker** (personal) + **outpost# + faction** (which group they joined). Example: moniker "GhostHunter", belonging to Outpost 33 FANG.
+
+**Display format:** "Outpost 33 FANG" (not "FANG faction", not "codename FANG"). The word "faction" stays out of the UI — FANG/HAMMER/RESOLUTE appear only as part of the outpost identity string.
+
+### 2.7 User identity flow (locked)
 
 ```
 1. User on AORDF does "create safehouse" special mission
-2. User selects allegiance on AORDF (FANG / HAMMER / RESOLUTE)
-3. AORDF assigns them an outpost number within that codename
-   (e.g., Outpost 33 → codename FANG)
+2. User selects an outpost to join on AORDF (Outpost 33 FANG / 21 HAMMER / 7 RESOLUTE)
+3. User chooses their moniker (personal handle) on AORDF
 4. AORDF redirects them to 42 with their identity:
-   { outpost: 33, codename: FANG }
+   { outpostNumber: 33, factionName: "FANG", moniker: "GhostHunter" }
 5. User downloads Safehouse software, returns to 42
-6. User picks location on 42's map, places → activates
+6. User picks location on 42's map, names their Safehouse, places → activates
 7. Future visits to 42 with wallet → 42 already knows
-   "you are Outpost 33, codename FANG"
+   "you are GhostHunter, Outpost 33 FANG"
 ```
 
-**Critical:** The outpost number + codename is assigned on **AORDF**, not 42. 42 receives it as the user's identity. The outpost/codename is **fixed** — Outpost 33 is always codename FANG. Permanent.
+**Critical:** The outpost# + faction + moniker are assigned on **AORDF**, not 42. 42 receives it as the user's identity (read-only). The outpost# + faction are **fixed** — Outpost 33 is always FANG. Permanent. The moniker is fixed once chosen.
 
-When a user returns to 42 directly with their wallet (not via AORDF), 42 already knows their outpost number and codename — no re-selection, no onboarding flow.
+When a user returns to 42 directly with their wallet (not via AORDF), 42 already knows their outpost#, faction, and moniker — no re-selection, no onboarding flow.
 
-### 2.7 No "faction" language in frontend (locked)
+### 2.8 No "faction" language in frontend (locked, corrected)
 
-FANG, HAMMER, RESOLUTE are **codenames**, not factions. The word "faction" never appears in the frontend UI.
+The word "faction" never appears in frontend UI strings. FANG/HAMMER/RESOLUTE are **faction names** (part of the outpost identity), displayed as "Outpost 33 FANG" — never as "FANG faction".
 
 | Layer | Term |
 |---|---|
 | Backend code (internal) | `faction`, `FactionId` — acceptable as internal type names |
-| Frontend UI strings | **Never "faction"** — use "codename" or just the codename itself (FANG, HAMMER, RESOLUTE) |
-| User-facing label format | **PENDING (Q4)** — "Codename FANG"? "Designation FANG"? "Outpost 33 · FANG"? |
+| Frontend UI strings | **Never "faction"** — display as "Outpost {number} {factionName}" (e.g., "Outpost 33 FANG") |
+| User's personal handle | **"Moniker"** (AORDF's term) — not "codename", not "username" in UI |
 
-### 2.8 Codename assignment logic (PENDING Q3)
+### 2.9 Outpost structure (locked)
 
-How is the codename assigned to a new outpost number?
+There are exactly 3 outposts currently. More will be added as the story progresses. Each outpost has:
+- **Outpost number** (33, 21, 7) — fixed identifier
+- **Faction name** (FANG, HAMMER, RESOLUTE) — fixed
 
-- **(a) Number-range based** — Outpost 33+ are FANG, 21+ are HAMMER, 7+ are RESOLUTE. The existing `FACTION_OUTPOST_NUMBER` constants (33/21/7) look like range starts. AORDF picks the next available number in the codename's range.
-- **(b) Independent** — AORDF assigns codename and outpost number separately. Outpost 33 happened to get FANG by AORDF's choice.
+Future example: "Outpost 11 Viper" (doesn't exist yet — story-driven expansion).
 
-**PENDING:** Which is it? (Guess: (a), based on the existing 33/21/7 constants in `src/lib/factions.ts`.)
+Users **join** an existing outpost on AORDF. They do not get assigned a new outpost number. The outpost# + faction are properties of the outpost itself, not per-user assignments.
 
-### 2.9 Ownership model (locked)
+**42 has no visibility into outpost/faction assignment.** AORDF owns it entirely. 42 receives the user's identity (outpost# + faction + moniker) as read-only data.
+
+### 2.10 Critical code conflict (PENDING — needs confirmation before refactor)
+
+The current codebase has a naming collision that contradicts the terminology above:
+
+```typescript
+// src/lib/types.ts — CURRENT (conflicts with user terminology)
+export interface Outpost {
+  id: string;
+  name: string;
+  type: OutpostType;  // "FULL" | "TACTICAL" | "SAFEHOUSE"
+  faction: FactionId;
+  ...
+}
+```
+
+Here, `Outpost` = a **placed structure** (what the user calls a Safehouse/Tactical Safehouse). But in the user's vocabulary, **"Outpost" = the top-level faction group** (Outpost 33 FANG). These are completely different things.
+
+**Proposed fix (not yet applied — pending confirmation):**
+- Rename current `Outpost` type → `Safehouse` (the placed structure)
+- Rename `OutpostType` → `SafehouseType` = `"SAFEHOUSE" | "TACTICAL"` (drop `"FULL"`)
+- Introduce a new `Outpost` type for the top-level group: `{ number: number; factionName: string }`
+- Each `Safehouse` references its outpost: `outpostNumber: number` (33/21/7)
+
+This rename touches ~17 files (every file that imports `Outpost`). Will not apply until confirmed.
+
+### 2.11 Ownership model (locked)
 
 | Concept | Owner |
 |---|---|
@@ -126,11 +169,11 @@ How is the codename assigned to a new outpost number?
 
 The faction doesn't "own" outposts; users do. Faction is just which side you fight for.
 
-### 2.10 User-named outposts (locked)
+### 2.12 User-named outposts (locked)
 
 Users name their own Safehouses and Tactical Safehouses at placement time. The `Outpost.name` field becomes user-provided (was auto-generated "FANG NODE 5" in the mock). The alphanumeric code (FNG-2155-NYC) is separate and system-generated — both display together.
 
-### 2.11 Sabotage attribution (locked, detail deferred)
+### 2.13 Sabotage attribution (locked, detail deferred)
 
 The placing user's handle (`Outpost.ownerName`) appears on the outpost preview card — **but only visible during successful sabotage**. When someone sabotages your outpost, you see their name. The exact visibility rules (how long the name shows, who can see it, retroactive vs. live) are **deferred to later**.
 
@@ -352,9 +395,9 @@ The user never sees a wallet address. They see their rank, and they interact wit
 - No "Connect Wallet" CTA anywhere in the UI.
 - No wallet address string ever displayed.
 
-### 6.3 Rank computation (PENDING)
+### 6.3 Rank computation — AORDF (locked)
 
-How is the rank insignia itself computed? Likely from outpost level + achievements, but the exact formula is TBD. **PENDING:** What determines the user's rank? (Outpost level? VOTC earned? Sol cycles survived? Combination?)
+**Rank computation is handled by AORDF**, not 42. Same pattern as the VOTC formula — 42 displays the rank AORDF computes, doesn't calculate it. The rank insignia's level/progression is read-only data from AORDF.
 
 ---
 
@@ -414,21 +457,25 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | 21 | User's handle (`ownerName`) appears on outpost preview card — only visible during successful sabotage. Detail deferred. | ✅ Locked |
 | 22 | No "node" or "full" terminology anywhere — frontend OR backend. `OutpostType` enum removes `"FULL"`. Safehouse = daemon, Tactical Safehouse = plugin. | ✅ Locked |
 | 23 | VOTC earnings display = Option B (wallet total + per-outpost accrual breakdown) | ✅ Locked |
-| 24 | Outpost number + codename assigned on AORDF (not 42). 42 receives it as identity. | ✅ Locked |
-| 25 | Outpost/codename is **fixed** — Outpost 33 is always codename FANG. Permanent. | ✅ Locked |
-| 26 | **No "faction" language in frontend.** FANG/HAMMER/RESOLUTE are codenames. Backend can keep `FactionId` as internal type. | ✅ Locked |
+| 24 | Outpost# + faction + moniker assigned on AORDF (not 42). 42 receives it as identity. | ✅ Locked |
+| 25 | Outpost#/faction is **fixed** — Outpost 33 is always FANG. Permanent. Moniker fixed once chosen. | ✅ Locked |
+| 26 | **No "faction" language in frontend UI strings.** FANG/HAMMER/RESOLUTE are faction names displayed as "Outpost 33 FANG". User's personal handle = "moniker" (not "codename"). Backend can keep `FactionId` internally. *(Corrected — previous version wrongly called FANG/HAMMER/RESOLUTE "codenames")* | ✅ Locked |
 | 27 | **No traditional wallet UI** — no "Connect Wallet" button, no wallet address display. Wallet is invisible. | ✅ Locked |
 | 28 | Rank insignia IS the wallet button. Click → wallet actions. | ✅ Locked |
 | 29 | Hover rank insignia → display balances (VOTC + pending). | ✅ Locked |
+| 30 | **"Outpost" = top-level group** (3 exist: #33 FANG, #21 HAMMER, #7 RESOLUTE). More added as story progresses. Each has outpost# + faction name (fixed). | ✅ Locked |
+| 31 | **"Moniker" = user's personal handle** (AORDF's term). User-chosen, fixed. Not "codename". | ✅ Locked |
+| 32 | Users JOIN an existing outpost on AORDF. Outpost# + faction are properties of the outpost, not assigned per-user. | ✅ Locked |
+| 33 | **Rank computation = AORDF.** 42 displays AORDF's rank, doesn't compute it. | ✅ Locked |
+| 34 | Future outposts: outpost number + faction name (e.g., "Outpost 11 Viper"). Story-driven expansion. | ✅ Locked |
+| 35 | **42 has no visibility into outpost/faction assignment.** AORDF owns it entirely. 42 receives user identity (outpost# + faction + moniker) as read-only. | ✅ Locked |
 
 ### Open questions (PENDING — need user confirmation before implementation)
 
 | # | Question | Context | Status |
 |---|---|---|---|
 | Q1 | Can 42 submit actions to AORDF, or must users go to AORDF to launch attacks? | §5.3. Determines whether attack/defend buttons stay in 42 or get removed. | **DEFERRED** — buttons stay as connectors for now; decision later |
-| Q3 | How is the codename assigned to a new outpost number? | §2.8. (a) Number-range based (33+=FANG, 21+=HAMMER, 7+=RESOLUTE) or (b) Independent (AORDF assigns both). | **PENDING** |
-| Q4 | What's the user-facing label format for codenames? | §2.7. "Codename FANG"? "Designation FANG"? "Outpost 33 · FANG"? | **PENDING** |
-| Q5 | What determines the user's rank (for the rank insignia)? | §6.3. Outpost level? VOTC earned? Sol cycles survived? Combination? | **PENDING** |
+| Q6 | Code conflict: rename current `Outpost` type → `Safehouse`? | §2.10. Current code's `Outpost` = placed structure, but user's "Outpost" = top-level group. Rename touches ~17 files. | **PENDING** |
 
 ### Resolved questions
 
@@ -440,6 +487,9 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | ~~Q4~~ | ~~Formula public or opaque?~~ | **Public through AORDF**, not 42. §5.2. |
 | ~~Q5~~ | ~~Per-outpost accrual breakdown in UI: Option A or B?~~ | **Option B** locked (lock 23). §5.5. |
 | ~~Q6~~ | ~~Do pre-existing faction HQ outposts exist in the real system?~~ | **No.** Every outpost is user-placed. `OutpostType` = `"SAFEHOUSE" \| "TACTICAL"` only. §2.5. |
+| ~~Q7~~ | ~~How is the codename assigned to a new outpost number?~~ | Not range-based, not independent. Outpost# + faction are fixed properties of the outpost itself. Users join an existing outpost. §2.9. |
+| ~~Q8~~ | ~~What's the user-facing label format for codenames?~~ | "Outpost 33 FANG". User's personal handle = "moniker". §2.6, §2.8. |
+| ~~Q9~~ | ~~What determines the user's rank?~~ | **AORDF** computes rank. 42 displays it. §6.3. |
 
 ---
 

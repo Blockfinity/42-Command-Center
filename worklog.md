@@ -1253,3 +1253,40 @@ Stage Summary:
 - Wallet UX completely redefined: no traditional wallet UI. Rank insignia is the wallet proxy (hover=balances, click=actions). No wallet address ever shown.
 - 3 pending questions remain: codename assignment logic (range vs independent), codename label format, rank computation formula.
 - 1 deferred question: can 42 submit actions to AORDF (buttons stay as connectors for now).
+
+---
+Task ID: SPEC-5
+Agent: Z.ai Code (main session)
+Task: Resolve Q3/Q4/Q5; correct terminology (codename vs faction vs moniker); flag critical code conflict (Outpost type collision).
+
+Work Log:
+- Read user's 3 answers:
+  1. (skipped — addressed in point 3)
+  2. "codename is the username" — codename = moniker = user's personal handle. Backend can keep current FactionId schema.
+  3. Major reframing: there are 3 outposts (top-level groups), each with outpost# + faction name (33 FANG, 21 HAMMER, 7 RESOLUTE). Users JOIN an outpost on AORDF. The user's personal handle = moniker. Future outposts added as story progresses (e.g., "Outpost 11 Viper"). When activating a safehouse, user names it; outpost# + faction don't change.
+  Q5: Rank computation = AORDF.
+- Identified critical terminology error in previous spec version: I had conflated "codename" (user's handle) with "faction name" (FANG/HAMMER/RESOLUTE). Corrected:
+  - "Outpost" = top-level group (33 FANG, 21 HAMMER, 7 RESOLUTE) — NOT the placed structure
+  - "Faction name" = FANG/HAMMER/RESOLUTE (part of outpost identity)
+  - "Moniker" = user's personal handle (what I was wrongly calling "codename")
+  - "Safehouse name" = user's chosen name for their placed structure
+- Identified critical code conflict: current `Outpost` type in src/lib/types.ts = placed structure, but user's "Outpost" = top-level group. These are different things. Proposed rename: `Outpost` → `Safehouse` (placed structure), introduce new `Outpost` type for top-level group. ~17 files affected. PENDING confirmation.
+- Updated docs/BACKEND_INTEGRATION_SPEC.md:
+  - §2.6 new: Terminology — CORRECTED (full table of Outpost/Outpost#/Faction name/Moniker/Safehouse name)
+  - §2.7 rewritten: User identity flow (corrected: outpost# + faction + moniker, not "codename")
+  - §2.8 rewritten: No "faction" language in frontend (corrected: FANG/HAMMER/RESOLUTE are faction names in outpost identity string, moniker is user's handle)
+  - §2.9 new: Outpost structure (3 outposts, fixed#, join on AORDF, 42 has no visibility into assignment)
+  - §2.10 new: Critical code conflict (Outpost type collision, proposed rename, PENDING)
+  - Renumbered §2.9-2.11 → §2.11-2.13 (ownership, user-named, sabotage)
+  - §6.3 rewritten: Rank computation = AORDF (was PENDING)
+  - Lock list: corrected locks 24-25 (moniker not codename), corrected lock 26 (faction names not codenames), added locks 30-35
+  - Open questions: Q3/Q4/Q5 all resolved. New Q6 (code conflict rename). Q1 still deferred.
+- NO CODE CHANGED — spec update only.
+
+Stage Summary:
+- Spec now has 35 confirmed locks + 1 deferred question + 1 pending question.
+- Major terminology correction: "codename" was wrong — FANG/HAMMER/RESOLUTE are "faction names" (part of outpost identity), user's personal handle is "moniker". Display format: "Outpost 33 FANG".
+- Critical code conflict flagged: `Outpost` type in code = placed structure, but user's "Outpost" = top-level group. Rename proposed (Outpost → Safehouse for placed structure, new Outpost type for group). ~17 files. PENDING confirmation before refactor.
+- Rank computation = AORDF (same pattern as VOTC formula). 42 displays, doesn't compute.
+- 1 pending question: confirm the Outpost → Safehouse rename direction.
+- 1 deferred question: can 42 submit actions to AORDF (buttons stay as connectors for now).
