@@ -8,7 +8,6 @@ import { NavRail, type NavView } from "@/components/command/nav-rail";
 import { LeftPanel } from "@/components/command/left-panel";
 import { StatusBar } from "@/components/command/status-bar";
 import { BootScreen } from "@/components/command/boot-screen";
-import { GarrisonDetailCard } from "@/components/command/outpost-detail-card";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import { useSfx } from "@/hooks/use-sfx";
@@ -21,6 +20,13 @@ const MapView = dynamic(() => import("@/components/command/map/map-view").then((
   ssr: false,
   loading: () => <div className="flex h-full w-full items-center justify-center bg-black" />,
 });
+
+// GarrisonDetailCard is only shown when a garrison is selected — lazy-load
+// it so framer-motion + the card's own deps stay out of the initial bundle.
+const GarrisonDetailCard = dynamic(
+  () => import("@/components/command/outpost-detail-card").then((m) => m.GarrisonDetailCard),
+  { ssr: false },
+);
 
 export function CommandDeck() {
   const state = useCommand((s) => s.state);
@@ -40,6 +46,15 @@ export function CommandDeck() {
   const [view, setView] = React.useState<NavView | null>(null);
   const [started, setStarted] = React.useState(false);
   const [bootError, setBootError] = React.useState(false);
+
+  // ---- prefetch the map chunk while the user is on the boot screen ----
+  // The map dynamic chunk (~2MB prod) is the single heaviest resource. By
+  // triggering the import on mount (before the user even clicks ESTABLISH
+  // UPLINK), the download overlaps with the boot screen idle time + the
+  // 2.6s boot sequence, instead of starting after state arrives.
+  React.useEffect(() => {
+    void import("@/components/command/map/map-view");
+  }, []);
 
   // ---- connect gate: only start socket after user clicks ESTABLISH UPLINK ----
   // BootScreen owns the click sound (transition cue + uplink sequence);
@@ -205,7 +220,7 @@ export function CommandDeck() {
         <>
           {/* Full-screen map stage */}
           <main className="vignette absolute inset-0 bg-black">
-            <div className="grid-overlay--major absolute inset-0 opacity-60" />
+            <div className="grid-overlay--major absolute inset-0 opacity-20" />
             <MapView
               initialCenter={initialCenter}
               selectedId={selectedId}

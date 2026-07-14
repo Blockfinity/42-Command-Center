@@ -44,6 +44,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="dark">
+      <head>
+        {/* Preconnect to the Esri tile server so the first satellite tile
+            request doesn't pay DNS + TLS cold-start (~100-300ms). */}
+        <link rel="preconnect" href="https://server.arcgisonline.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://server.arcgisonline.com" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${stencil.variable} antialiased bg-background text-foreground`}
       >

@@ -139,11 +139,26 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
       map.on("move", onMove);
 
       // 6. Single rAF animation loop — calls every layer's animate().
+      // Throttled to ~30fps (33ms) instead of 60fps — the pulse/mission
+      // animations are visually indistinguishable above 30fps, and this
+      // halves the number of setPaintProperty calls (which trigger WebGL
+      // repaints). Also gated on document visibility: when the tab is
+      // hidden, rAF is throttled to ~1fps by the browser anyway, but we
+      // skip the animate() calls entirely to avoid wasted CPU.
+      const ANIMATE_INTERVAL_MS = 33; // ~30fps
+      let lastAnimateTick = 0;
       const animateLoop = () => {
         if (!mounted) return;
+        if (document.hidden) {
+          rafId = requestAnimationFrame(animateLoop);
+          return;
+        }
         const now = performance.now();
-        for (const layer of LAYERS) {
-          layer.animate?.(map, now);
+        if (now - lastAnimateTick >= ANIMATE_INTERVAL_MS) {
+          lastAnimateTick = now;
+          for (const layer of LAYERS) {
+            layer.animate?.(map, now);
+          }
         }
         rafId = requestAnimationFrame(animateLoop);
       };

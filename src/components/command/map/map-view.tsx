@@ -20,6 +20,7 @@
 "use client";
 
 import * as React from "react";
+import "maplibre-gl/dist/maplibre-gl.css";
 import type maplibregl from "maplibre-gl";
 import { Plus, Minus, Maximize2 } from "lucide-react";
 import { useCommand } from "@/stores/command";
@@ -152,11 +153,12 @@ export function MapView({
       <div className="pointer-events-none absolute inset-0 bg-black" />
 
       {/* MapLibre canvas — all graphics are WebGL layers ON the globe surface.
-          Container fills the parent with no CSS transform — transforms break
-          MapLibre's project()/queryRenderedFeatures coordinate alignment. */}
+          Container fills the parent with h-full w-full (NOT absolute inset-0 —
+          MapLibre's CSS sets .maplibregl-map { position: relative } which
+          overrides Tailwind's absolute, breaking inset-0 sizing). */}
       <div
         ref={containerRef}
-        className={cn("absolute inset-0", cursor)}
+        className={cn("h-full w-full", cursor)}
       />
 
       {/* LayerHost mounts all gameplay layers + sources once the map is ready */}

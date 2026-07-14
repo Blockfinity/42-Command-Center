@@ -19,8 +19,10 @@
 import maplibregl from "maplibre-gl";
 import type { FeatureCollection, Geometry, GeoJSON } from "geojson";
 import { feature } from "topojson-client";
-import worldTopo from "world-atlas/countries-10m.json";
-import { buildVectorSource } from "./tile-provider";
+// 110m resolution (108 KB) instead of 10m (3.5 MB) — plenty for globe zoom 0-8,
+// saves ~3.4 MB of inlined JSON from the dynamic map chunk.
+import worldTopo from "world-atlas/countries-110m.json";
+import { buildRasterSource, buildVectorSource } from "./tile-provider";
 
 // ---- Static world data (computed once at module scope) ----
 const worldFeat = feature(
@@ -65,9 +67,12 @@ export function createMap(opts: CreateMapOptions): MapController {
     pitch: 0,
   };
 
-  // Vector tile source (roads/buildings/water/landuse). Required for the
-  // dark monochrome aesthetic — the basemap IS the vector tiles.
+  // Vector tile source (roads/buildings/water/landuse). Null on Esri
+  // (satellite-only provider) — roads/buildings layers skip mounting.
   const vectorSource = buildVectorSource();
+  // Raster satellite source — the actual base imagery (Esri World Imagery
+  // by default). This is what makes the globe VISIBLE instead of near-black.
+  const rasterSource = buildRasterSource();
 
   const map = new maplibregl.Map({
     container,
@@ -75,22 +80,36 @@ export function createMap(opts: CreateMapOptions): MapController {
       version: 8,
       projection: { type: "globe" } as never,
       sources: {
+        // Satellite raster tiles — the visible base layer.
+        satellite: rasterSource,
         world: { type: "geojson", data: worldFeat as unknown as GeoJSON.GeoJSON },
         ocean: { type: "geojson", data: { type: "FeatureCollection", features: [oceanFeature] } },
         ...(vectorSource ? { "vector-tiles": vectorSource } : {}),
       },
       layers: [
-        // ---- Solid dark ocean base (visible at ALL zoom levels) ----
-        // This is the canvas the vector tiles render on top of. Near-black
-        // so the white roads + dark buildings read with maximum contrast.
+        // ---- Satellite imagery base (BOTTOM layer — the visible globe) ----
+        // Slightly desaturated + mildly darkened to match the tactical aesthetic
+        // without hiding the imagery. raster-saturation -0.3 subtle desaturation;
+        // brightness-max 0.8 keeps imagery visible but not glaring.
+        { id: "satellite-base", type: "raster", source: "satellite", paint: {
+          "raster-saturation": -0.3,
+          "raster-brightness-min": 0.0,
+          "raster-brightness-max": 0.8,
+          "raster-contrast": 0.05,
+          "raster-opacity": 1.0,
+          "raster-fade-duration": 0,
+        } },
+
+        // ---- Solid dark ocean base (transparent — satellite shows oceans) ----
+        // Kept as a fallback: if satellite tiles are still loading or fail,
+        // the ocean fill provides a dark backdrop. Opacity 0 once tiles arrive
+        // (satellite already renders ocean imagery).
         { id: "ocean-fill", type: "fill", source: "ocean", paint: {
           "fill-color": "#050506",
-          "fill-opacity": 1.0,
+          "fill-opacity": 0.0,
         } },
 
         // ---- Water bodies (rivers, lakes, harbors) from vector tiles ----
-        // Dark gray — lighter than the ocean base so water features read
-        // as distinct from land. Visible at all zooms (continuous).
         ...(vectorSource ? [{
           id: "water-fill",
           type: "fill" as const,
@@ -98,7 +117,7 @@ export function createMap(opts: CreateMapOptions): MapController {
           "source-layer": "water",
           paint: {
             "fill-color": "#1a1a1f",
-            "fill-opacity": 1.0,
+            "fill-opacity": 0.3,
           },
         }] : []),
 
@@ -110,16 +129,16 @@ export function createMap(opts: CreateMapOptions): MapController {
           "source-layer": "landuse",
           paint: {
             "fill-color": "#0a0a0c",
-            "fill-opacity": 1.0,
+            "fill-opacity": 0.4,
           },
         }] : []),
 
         // ---- Country outlines (globe/region zoom only) ----
-        // Subtle white outlines that fade out as roads take over at region zoom.
-        // Provides continental context at globe view without competing with roads.
+        // White outlines on top of the satellite imagery for geopolitical context.
+        // Fade out at region zoom so roads/buildings take over.
         { id: "countries-fill", type: "fill", source: "world", paint: {
           "fill-color": "#0a0a0a",
-          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 8, 0.0],
+          "fill-opacity": 0.0,
         } },
         {
           id: "countries-line",
@@ -127,7 +146,7 @@ export function createMap(opts: CreateMapOptions): MapController {
           source: "world",
           paint: {
             "line-color": "#ffffff",
-            "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.25, 4, 0.30, 8, 0.0],
+            "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.35, 4, 0.30, 8, 0.0],
             "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 2, 0.7, 4, 0.9],
           },
         },
@@ -170,9 +189,13 @@ export function createMap(opts: CreateMapOptions): MapController {
   map.on("zoomend", onZoom);
 
   // ---- Auto-rotate loop (pauses 3.5s after user interaction) ----
+  // Throttled to ~20fps and gated on document visibility to avoid wasted
+  // GPU repaints when the tab is hidden or the user is interacting.
   let lastInteract = performance.now();
   let rafId: number | null = null;
   let pauseUntil = 0;
+  let lastRotateTick = 0;
+  const ROTATE_INTERVAL_MS = 50; // ~20fps — smooth enough for slow rotation
 
   const onInteract = () => { lastInteract = performance.now(); };
   container.addEventListener("pointerdown", onInteract);
@@ -180,10 +203,17 @@ export function createMap(opts: CreateMapOptions): MapController {
   container.addEventListener("touchstart", onInteract, { passive: true });
 
   const rotateLoop = () => {
+    if (document.hidden) {
+      rafId = requestAnimationFrame(rotateLoop);
+      return;
+    }
     const now = performance.now();
-    if (now - lastInteract > 3500 && now > pauseUntil) {
-      const b = map.getBearing();
-      map.jumpTo({ bearing: b + 0.05 });
+    if (now - lastRotateTick >= ROTATE_INTERVAL_MS) {
+      lastRotateTick = now;
+      if (now - lastInteract > 3500 && now > pauseUntil) {
+        // setBearing is cheaper than jumpTo (no camera recomputation overhead).
+        map.setBearing(map.getBearing() + 0.06);
+      }
     }
     rafId = requestAnimationFrame(rotateLoop);
   };
