@@ -71,24 +71,51 @@ Placement is authorized only when all three conditions hold. The frontend **neve
    - `TACTICAL` placement ← requires **Tactical Safehouse** (plugin) installed on the device
 3. **Device has not placed yet** — lifetime cap, source = 42
 
-### 2.5 Faction HQ outposts (PENDING — do they exist in the real system?)
+### 2.5 Faction HQ outposts — they don't exist (locked)
 
-The current mock seed data includes pre-existing faction HQ outposts coded as `type: "FULL"`:
+**Confirmed:** Pre-existing faction HQ outposts do **not** exist in the real system. Every outpost on the map is user-placed (Safehouse or Tactical Safehouse). Factions have no home bases.
+
+**Action:** The mock seed data faction HQs (Fang Prime, Hammer Forge, Resolute Stand, etc., currently `type: "FULL"`) get removed. The `OutpostType` enum becomes `"SAFEHOUSE" | "TACTICAL"` only — `"FULL"` is removed entirely (per lock 22).
+
+### 2.6 User identity flow (locked)
 
 ```
-Fang Prime, Fang Spire, Fang Vault, Fang Reach       (FANG HQs)
-Hammer Forge, Hammer Anvil, Hammer Crucible, ...      (HAMMER HQs)
-Resolute Stand, Resolute Watch, Resolute Drift, ...   (RESOLUTE HQs)
+1. User on AORDF does "create safehouse" special mission
+2. User selects allegiance on AORDF (FANG / HAMMER / RESOLUTE)
+3. AORDF assigns them an outpost number within that codename
+   (e.g., Outpost 33 → codename FANG)
+4. AORDF redirects them to 42 with their identity:
+   { outpost: 33, codename: FANG }
+5. User downloads Safehouse software, returns to 42
+6. User picks location on 42's map, places → activates
+7. Future visits to 42 with wallet → 42 already knows
+   "you are Outpost 33, codename FANG"
 ```
 
-These are not user-placed — they're faction starting infrastructure. The user asked "what is an anchor?" (didn't recognize the term), so the concept itself needs confirmation.
+**Critical:** The outpost number + codename is assigned on **AORDF**, not 42. 42 receives it as the user's identity. The outpost/codename is **fixed** — Outpost 33 is always codename FANG. Permanent.
 
-**PENDING:** Do pre-existing faction HQs exist in the real system, or does every outpost start as a user-placed Safehouse/Tactical Safehouse?
+When a user returns to 42 directly with their wallet (not via AORDF), 42 already knows their outpost number and codename — no re-selection, no onboarding flow.
 
-- **If they exist:** they need a user-facing name (since "FULL" is banned per lock 22). What do we call them? "Faction HQ"? "Command post"?
-- **If they don't exist:** every outpost on the map is user-placed. Factions don't have home bases — just collections of user-placed outposts.
+### 2.7 No "faction" language in frontend (locked)
 
-### 2.6 Ownership model (locked)
+FANG, HAMMER, RESOLUTE are **codenames**, not factions. The word "faction" never appears in the frontend UI.
+
+| Layer | Term |
+|---|---|
+| Backend code (internal) | `faction`, `FactionId` — acceptable as internal type names |
+| Frontend UI strings | **Never "faction"** — use "codename" or just the codename itself (FANG, HAMMER, RESOLUTE) |
+| User-facing label format | **PENDING (Q4)** — "Codename FANG"? "Designation FANG"? "Outpost 33 · FANG"? |
+
+### 2.8 Codename assignment logic (PENDING Q3)
+
+How is the codename assigned to a new outpost number?
+
+- **(a) Number-range based** — Outpost 33+ are FANG, 21+ are HAMMER, 7+ are RESOLUTE. The existing `FACTION_OUTPOST_NUMBER` constants (33/21/7) look like range starts. AORDF picks the next available number in the codename's range.
+- **(b) Independent** — AORDF assigns codename and outpost number separately. Outpost 33 happened to get FANG by AORDF's choice.
+
+**PENDING:** Which is it? (Guess: (a), based on the existing 33/21/7 constants in `src/lib/factions.ts`.)
+
+### 2.9 Ownership model (locked)
 
 | Concept | Owner |
 |---|---|
@@ -99,11 +126,11 @@ These are not user-placed — they're faction starting infrastructure. The user 
 
 The faction doesn't "own" outposts; users do. Faction is just which side you fight for.
 
-### 2.7 User-named outposts (locked)
+### 2.10 User-named outposts (locked)
 
 Users name their own Safehouses and Tactical Safehouses at placement time. The `Outpost.name` field becomes user-provided (was auto-generated "FANG NODE 5" in the mock). The alphanumeric code (FNG-2155-NYC) is separate and system-generated — both display together.
 
-### 2.8 Sabotage attribution (locked, detail deferred)
+### 2.11 Sabotage attribution (locked, detail deferred)
 
 The placing user's handle (`Outpost.ownerName`) appears on the outpost preview card — **but only visible during successful sabotage**. When someone sabotages your outpost, you see their name. The exact visibility rules (how long the name shows, who can see it, retroactive vs. live) are **deferred to later**.
 
@@ -302,11 +329,40 @@ The user specified the formula takes "uptime and health and other items" as inpu
 
 ---
 
-## 6. Architecture — source adapter split
+## 6. Wallet UX — rank insignia as wallet proxy
+
+**No traditional wallet UI.** There is no "Connect Wallet" button, no wallet address display, no MetaMask popup. The wallet is invisible to the user.
+
+### 6.1 The rank insignia IS the wallet button (locked)
+
+The user's rank insignia (computed from outpost level / achievements) doubles as the wallet interaction surface:
+
+| Interaction | Behavior |
+|---|---|
+| **Hover** the rank insignia | Display balances — VOTC balance (settled) + pending this cycle |
+| **Click** the rank insignia | Open wallet actions — sign transactions, etc. |
+
+The user never sees a wallet address. They see their rank, and they interact with the rank insignia as their wallet proxy.
+
+### 6.2 Implications
+
+- The rank insignia component must exist (it's the user's rank/level display).
+- A hover-tooltip shows VOTC balance + pending earnings (Option B breakdown can live here or in a separate panel — TBD).
+- Clicking the rank insignia triggers wallet-side actions (signing, etc.) — the actual wallet connection is abstracted away from the user.
+- No "Connect Wallet" CTA anywhere in the UI.
+- No wallet address string ever displayed.
+
+### 6.3 Rank computation (PENDING)
+
+How is the rank insignia itself computed? Likely from outpost level + achievements, but the exact formula is TBD. **PENDING:** What determines the user's rank? (Outpost level? VOTC earned? Sol cycles survived? Combination?)
+
+---
+
+## 7. Architecture — source adapter split
 
 The current `mini-services/game-engine` is a single monolithic mock that synthesizes everything. To connect to the real backend it must split into distinct source adapters. The registry/source architecture in `src/components/command/map/registry/sources.ts` was designed for exactly this swap.
 
-### 6.1 Proposed source layout
+### 7.1 Proposed source layout
 
 ```
 sources/
@@ -318,7 +374,7 @@ sources/
 
 The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat:batch`, `ping:batch`) already abstracts over the source — so swapping the mock engine for real AORDF/wallet/sol-cycle sources is a registry swap, not a rewrite.
 
-### 6.2 NormalizedEvent contract (existing, retained)
+### 7.2 NormalizedEvent contract (existing, retained)
 
 | Event | Producer | Consumer |
 |---|---|---|
@@ -331,7 +387,7 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 
 ---
 
-## 7. Consolidated lock list
+## 8. Consolidated lock list
 
 | # | Lock | Status |
 |---|---|---|
@@ -358,13 +414,21 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | 21 | User's handle (`ownerName`) appears on outpost preview card — only visible during successful sabotage. Detail deferred. | ✅ Locked |
 | 22 | No "node" or "full" terminology anywhere — frontend OR backend. `OutpostType` enum removes `"FULL"`. Safehouse = daemon, Tactical Safehouse = plugin. | ✅ Locked |
 | 23 | VOTC earnings display = Option B (wallet total + per-outpost accrual breakdown) | ✅ Locked |
+| 24 | Outpost number + codename assigned on AORDF (not 42). 42 receives it as identity. | ✅ Locked |
+| 25 | Outpost/codename is **fixed** — Outpost 33 is always codename FANG. Permanent. | ✅ Locked |
+| 26 | **No "faction" language in frontend.** FANG/HAMMER/RESOLUTE are codenames. Backend can keep `FactionId` as internal type. | ✅ Locked |
+| 27 | **No traditional wallet UI** — no "Connect Wallet" button, no wallet address display. Wallet is invisible. | ✅ Locked |
+| 28 | Rank insignia IS the wallet button. Click → wallet actions. | ✅ Locked |
+| 29 | Hover rank insignia → display balances (VOTC + pending). | ✅ Locked |
 
 ### Open questions (PENDING — need user confirmation before implementation)
 
 | # | Question | Context | Status |
 |---|---|---|---|
 | Q1 | Can 42 submit actions to AORDF, or must users go to AORDF to launch attacks? | §5.3. Determines whether attack/defend buttons stay in 42 or get removed. | **DEFERRED** — buttons stay as connectors for now; decision later |
-| Q2 | Do pre-existing faction HQ outposts exist in the real system? | §2.5. If yes, need a user-facing name (since "FULL" is banned). If no, every outpost is user-placed. | **PENDING** |
+| Q3 | How is the codename assigned to a new outpost number? | §2.8. (a) Number-range based (33+=FANG, 21+=HAMMER, 7+=RESOLUTE) or (b) Independent (AORDF assigns both). | **PENDING** |
+| Q4 | What's the user-facing label format for codenames? | §2.7. "Codename FANG"? "Designation FANG"? "Outpost 33 · FANG"? | **PENDING** |
+| Q5 | What determines the user's rank (for the rank insignia)? | §6.3. Outpost level? VOTC earned? Sol cycles survived? Combination? | **PENDING** |
 
 ### Resolved questions
 
@@ -375,10 +439,11 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | ~~Q3~~ | ~~What's in "other items" of the VOTC formula?~~ | Reframed: AORDF owns the full formula; 42 doesn't enumerate inputs. §5.2. |
 | ~~Q4~~ | ~~Formula public or opaque?~~ | **Public through AORDF**, not 42. §5.2. |
 | ~~Q5~~ | ~~Per-outpost accrual breakdown in UI: Option A or B?~~ | **Option B** locked (lock 23). §5.5. |
+| ~~Q6~~ | ~~Do pre-existing faction HQ outposts exist in the real system?~~ | **No.** Every outpost is user-placed. `OutpostType` = `"SAFEHOUSE" \| "TACTICAL"` only. §2.5. |
 
 ---
 
-## 8. Implementation status
+## 9. Implementation status
 
 **No code has been changed yet.** This document is the requirements spec only.
 

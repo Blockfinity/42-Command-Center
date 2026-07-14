@@ -1221,3 +1221,35 @@ Stage Summary:
 - Ownership clarified: wallet owns outposts, faction is allegiance.
 - 1 pending question remains: do pre-existing faction HQs exist in the real system, or is every outpost user-placed?
 - 1 deferred question: can 42 submit actions to AORDF (buttons stay as connectors for now).
+
+---
+Task ID: SPEC-4
+Agent: Z.ai Code (main session)
+Task: Resolve Q2 (faction HQs); capture 6 new locks on identity flow, codename terminology, and wallet UX.
+
+Work Log:
+- Read user's 3 answers:
+  1. Faction HQs don't exist — every outpost is user-placed.
+  2. Major reframing of "faction": FANG/HAMMER/RESOLUTE are codenames (not factions). User selects allegiance on AORDF; AORDF assigns outpost number + codename; redirects to 42 with identity. Outpost 33 = codename FANG permanently. No "faction" language in frontend.
+  3. Wallet UX: no traditional wallet UI. Rank insignia IS the wallet button. Hover = balances, click = wallet actions.
+- Updated docs/BACKEND_INTEGRATION_SPEC.md:
+  - §2.5 rewritten: "Faction HQ outposts — they don't exist (locked)". OutpostType enum = "SAFEHOUSE" | "TACTICAL" only.
+  - §2.6 new: User identity flow (AORDF assigns outpost# + codename → 42 receives → fixed permanently)
+  - §2.7 new: No "faction" language in frontend (codenames only). Backend can keep FactionId internally.
+  - §2.8 new: Codename assignment logic (PENDING Q3 — number-range based vs independent)
+  - Renumbered existing 2.6-2.8 → 2.9-2.11 (ownership, user-named, sabotage attribution)
+  - §6 new: Wallet UX — rank insignia as wallet proxy. Hover=balances, click=wallet actions. No Connect Wallet button, no address display.
+  - §7 (was §6): Architecture/source-adapter split, renumbered subsections 7.1-7.2
+  - §8 (was §7): Consolidated lock list
+  - §9 (was §8): Implementation status
+  - Lock list: added locks 24-29 (identity flow, fixed codename, no faction language, no traditional wallet UI, rank insignia = wallet button, hover = balances)
+  - Open questions: Q2 resolved (no faction HQs). New Q3 (codename assignment logic), Q4 (user-facing label format), Q5 (rank computation). Q1 still deferred.
+- NO CODE CHANGED — spec update only.
+
+Stage Summary:
+- Spec now has 29 confirmed locks + 1 deferred question + 3 pending questions.
+- Major architecture shift captured: AORDF owns the user identity assignment (outpost number + codename). 42 receives it as fixed identity — no onboarding, no re-selection. User returns with wallet, 42 already knows "Outpost 33, codename FANG".
+- Frontend terminology sweep pending: "faction" → "codename" in all UI strings. Backend can keep FactionId as internal type.
+- Wallet UX completely redefined: no traditional wallet UI. Rank insignia is the wallet proxy (hover=balances, click=actions). No wallet address ever shown.
+- 3 pending questions remain: codename assignment logic (range vs independent), codename label format, rank computation formula.
+- 1 deferred question: can 42 submit actions to AORDF (buttons stay as connectors for now).
