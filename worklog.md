@@ -1290,3 +1290,37 @@ Stage Summary:
 - Rank computation = AORDF (same pattern as VOTC formula). 42 displays, doesn't compute.
 - 1 pending question: confirm the Outpost → Safehouse rename direction.
 - 1 deferred question: can 42 submit actions to AORDF (buttons stay as connectors for now).
+
+---
+Task ID: SPEC-6
+Agent: Z.ai Code (main session)
+Task: Resolve conflict A (Garrison rename); define Safehouse/Tactical Safehouse semantics; confirm Solana tokens; propose scalable architecture for multi-app data ingestion.
+
+Work Log:
+- Read user's 3 points:
+  1. Conflict A resolution: use "garrison type" instead of "safehouse type", 2 values not 3.
+  2. Safehouse = full node (daemon); Tactical Safehouse = edge node (plugin). Token names = faction names, on Solana.
+  3. Architectural directive: ensure repo is scalable for multiple visualizations + data layers from multiple applications.
+- Resolved conflict A: Outpost interface → Garrison; OutpostType → GarrisonType = "SAFEHOUSE" | "TACTICAL" (2 values); new Outpost type for top-level group { number, factionName }. "Garrison" = placed structure; "type" = Safehouse or Tactical Safehouse.
+- Locked Safehouse/Tactical Safehouse semantics: Safehouse = full node daemon (complete infrastructure); Tactical Safehouse = edge node plugin (lightweight). The distinction is node class, not just "how it runs."
+- Locked Solana tokens: FANG, HAMMER, RESOLUTE, VOTC are all SPL tokens on Solana. Token symbol = faction name. Existing FACTION_TOKEN constant already maps correctly.
+- Identified architectural scaling problem: sources and layers are buried under src/components/command/map/, making them map-specific. But AORDF/wallet/42 data feeds the entire app (panels, HUD, stores), not just the map.
+- Proposed scalable repo structure:
+  - src/sources/ (NEW, app-wide): aordf.source.ts, wallet.source.ts, sol-cycle.source.ts, identity.source.ts, mock.source.ts, registry.ts
+  - src/layers/ (NEW, app-wide): map/ (MapLibre layers), panels/ (future non-map visualizations), registry.ts
+  - src/lib/types/ (NEW): garrison.ts, outpost.ts, events.ts (NormalizedEvent vocabulary), mission.ts, index.ts
+  - components/command/ becomes presentation-only (consumes sources + layers, no source logic)
+- Defined 7 scalability principles (locks 41-47): app-wide sources, hot-pluggable registries, NormalizedEvent as contract, map layers stay map-specific, mock behind config flag, multi-app ingestion ready.
+- Documented migration path (8 steps, not yet executed): create directories, move NormalizedEvent to lib/types/events.ts, move sources, move layers, move registries, apply Garrison rename, add config flag, update imports.
+- Restructured implementation plan into 4 phases: Phase 1 (architectural foundation), Phase 2 (data model + mock cleanup), Phase 3 (frontend wiring), Phase 4 (real backend connection). 15 steps total.
+- Conflict B (MissionType ownership) remains PENDING — user only addressed conflict A.
+- Updated docs/BACKEND_INTEGRATION_SPEC.md: §2.10 rewritten (conflict A resolved with Garrison), §2.10.1 new (conflict B pending), §7.3 new (scalability architecture with proposed repo structure + 7 principles + migration path), §9 restructured into 4 phases, lock list updated (locks 36-47 added, lock 5 corrected to use new terminology).
+- NO CODE CHANGED — spec update only.
+
+Stage Summary:
+- Spec now has 47 confirmed locks + 1 deferred question + 2 pending questions.
+- Conflict A RESOLVED: Outpost → Garrison, OutpostType → GarrisonType (2 values: SAFEHOUSE | TACTICAL), new Outpost type for top-level group.
+- Conflict B (MissionType ownership) still PENDING — needs user decision on whether 42 hardcodes missions or AORDF sends them.
+- Scalable architecture proposed: sources and layers move from map-specific to app-wide. 7 scalability principles locked. Migration path documented (8 steps, ~17 files affected).
+- Implementation plan restructured into 4 phases, 15 steps. Phase 1 (architectural foundation) must come first.
+- Ready to execute Phase 1 (repo restructure + Garrison rename + config flag + type cleanup) upon user confirmation (Q8).

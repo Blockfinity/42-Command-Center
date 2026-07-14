@@ -133,30 +133,58 @@ Users **join** an existing outpost on AORDF. They do not get assigned a new outp
 
 **42 has no visibility into outpost/faction assignment.** AORDF owns it entirely. 42 receives the user's identity (outpost# + faction + moniker) as read-only data.
 
-### 2.10 Critical code conflict (PENDING — needs confirmation before refactor)
+### 2.10 Code conflict A — RESOLVED (Garrison rename)
 
-The current codebase has a naming collision that contradicts the terminology above:
+The codebase had a naming collision: `Outpost` (the placed structure interface) vs "Outpost" (the top-level faction group in user terminology). **Resolved:**
+
+| What | Resolution |
+|---|---|
+| Current `Outpost` interface (placed structure) | Rename → **`Garrison`** |
+| Current `OutpostType` enum | Rename → **`GarrisonType`** |
+| `GarrisonType` values | `"SAFEHOUSE" \| "TACTICAL"` — **2 values only** (drop `"FULL"` per lock 22) |
+| New `Outpost` type (top-level group) | `{ number: number; factionName: string }` |
+| Each `Garrison` references its outpost | `outpostNumber: number` (33/21/7) |
+
+**Why "garrison":** A garrison is a military installation. The placed structure IS a garrison. It has a *type* — either a Safehouse (full node daemon) or Tactical Safehouse (edge plugin). So: a `Garrison` of `type: "SAFEHOUSE"` is a Safehouse; a `Garrison` of `type: "TACTICAL"` is a Tactical Safehouse. Clean separation between the structure (garrison) and the node class (safehouse/tactical).
 
 ```typescript
-// src/lib/types.ts — CURRENT (conflicts with user terminology)
-export interface Outpost {
+// PROPOSED (after refactor)
+export type GarrisonType = "SAFEHOUSE" | "TACTICAL";  // 2 values, not 3
+
+export interface Garrison {        // placed structure on the map
   id: string;
-  name: string;
-  type: OutpostType;  // "FULL" | "TACTICAL" | "SAFEHOUSE"
-  faction: FactionId;
-  ...
+  name: string;                    // user-chosen at placement
+  type: GarrisonType;              // SAFEHOUSE (daemon) | TACTICAL (plugin)
+  faction: FactionId;              // backend internal; UI shows "Outpost 33 FANG"
+  outpostNumber: number;           // 33 | 21 | 7 — which outpost this garrison belongs to
+  // ... health, compute, uptime, etc.
+}
+
+export interface Outpost {         // top-level faction group
+  number: number;                  // 33, 21, 7
+  factionName: string;             // "FANG", "HAMMER", "RESOLUTE"
 }
 ```
 
-Here, `Outpost` = a **placed structure** (what the user calls a Safehouse/Tactical Safehouse). But in the user's vocabulary, **"Outpost" = the top-level faction group** (Outpost 33 FANG). These are completely different things.
+This rename touches ~17 files (every file that imports `Outpost`). Not yet applied — pending the broader architectural refactor (§7.3).
 
-**Proposed fix (not yet applied — pending confirmation):**
-- Rename current `Outpost` type → `Safehouse` (the placed structure)
-- Rename `OutpostType` → `SafehouseType` = `"SAFEHOUSE" | "TACTICAL"` (drop `"FULL"`)
-- Introduce a new `Outpost` type for the top-level group: `{ number: number; factionName: string }`
-- Each `Safehouse` references its outpost: `outpostNumber: number` (33/21/7)
+### 2.10.1 Code conflict B — PENDING (MissionType ownership)
 
-This rename touches ~17 files (every file that imports `Outpost`). Will not apply until confirmed.
+Separate from conflict A. The current code hardcodes mission types in 42:
+
+```typescript
+// src/lib/types.ts — CURRENT
+export type MissionType = "DRONE_STRIKE" | "CYBER_ATTACK" | "ESPIONAGE" | "RECON" | "BUILD" | "DEFEND";
+export const MISSION_META: Record<MissionType, { label, verb, duration, cost, desc }> = { ... };
+```
+
+But per lock 19, AORDF is the game — it owns mission definitions, pricing, and durations. 42 should not hardcode these.
+
+**What needs resolution (PENDING):**
+- Remove `MissionType` + `MISSION_META` from 42 entirely (AORDF sends mission data)?
+- Keep as dev-mock fallback behind config flag?
+- Are the 6 current mission names (DRONE_STRIKE, etc.) AORDF's canonical names, or 42-invented labels that need to match AORDF's vocabulary?
+- Do `duration`, `label`, `verb`, `desc` all come from AORDF, or just `cost`?
 
 ### 2.11 Ownership model (locked)
 
@@ -428,6 +456,88 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | `ping:batch` | AORDF (realtime actions) | Layer host → pings layer |
 | `cycle:opened` / `cycle:closed` | 42 | Frontend store → sol cycle display |
 
+### 7.3 Scalability — app-wide source/layer architecture (locked)
+
+The current codebase has a structural problem: sources and layers are buried under `src/components/command/map/`, making them map-specific. But AORDF/wallet/42 data feeds the entire app (panels, HUD, stores), not just the map. The architecture must be reorganized for multi-source, multi-visualization scaling.
+
+**7 scalability principles:**
+
+| # | Principle |
+|---|---|
+| 41 | **Sources are app-wide** — live in `src/sources/`, not under `components/`. Any component/panel/store can consume any source. |
+| 42 | **Source registry is the single point of registration** — new sources added by creating a file + registering, not by editing existing code. |
+| 43 | **NormalizedEvent vocabulary is the contract** — lives in `src/lib/types/events.ts`. Sources emit normalized events; consumers subscribe to event types. Sources don't know about consumers; consumers don't know about sources. |
+| 44 | **Map layers stay map-specific** — under `src/layers/map/`. They're MapLibre-specific. Non-map visualizations (panels, HUD) get their own subdirectory under `src/layers/`. |
+| 45 | **Layer registry is hot-pluggable** — new layers added by creating a file + registering. No edits to existing layer files. |
+| 46 | **Mock source is a dev fallback behind a config flag** — `mock.source.ts` retained for development. Config flag (e.g. `NEXT_PUBLIC_DATA_SOURCE=aordf`) swaps mock for real adapters. |
+| 47 | **Multi-app ingestion ready** — the source interface is generic enough that future apps (beyond AORDF/wallet/42) can feed data by adding a new source adapter, without touching visualization code. |
+
+**Proposed repo structure:**
+
+```
+src/
+  app/                              # Next.js routes only
+  lib/
+    types/
+      garrison.ts                   # Garrison, GarrisonType, GarrisonStatus
+      outpost.ts                    # Outpost (top-level group)
+      events.ts                     # NormalizedEvent vocabulary (the contract)
+      mission.ts                    # Mission, MissionType (conflict B — pending)
+      index.ts                      # re-exports
+    factions.ts                     # faction/outpost constants
+    solana.ts                       # token addresses, SPL helpers
+  sources/                          # ← NEW: app-wide data source adapters
+    registry.ts                     # source registry (hot-pluggable)
+    types.ts                        # Source interface
+    aordf.source.ts                 # AORDF adapter (missions, events, earnings, garrisons)
+    wallet.source.ts                # wallet adapter (VOTC balance, transactions)
+    sol-cycle.source.ts             # 42 sol-cycle adapter (cycle boundaries, airdrops)
+    identity.source.ts              # 42 identity adapter (outpost#, faction, moniker, rank)
+    mock.source.ts                  # dev fallback (current game-engine logic)
+  layers/                           # ← NEW: app-wide visualization layer registry
+    registry.ts                     # layer registry (hot-pluggable)
+    types.ts                        # Layer interface
+    map/                            # map-specific layers (MapLibre)
+      buildings.layer.ts
+      roads.layer.ts
+      garrisons.layer.ts            # (renamed from outposts)
+      territory.layer.ts
+      missions.layer.ts
+      pings.layer.ts
+    panels/                         # panel-specific "layers" (future)
+      earnings-breakdown.ts         # Option B display
+  components/
+    command/                        # presentation only (consumes sources + layers)
+      map/                          # map view + controller (no source logic here)
+        controller.ts
+        view.tsx
+        layer-host.tsx              # mounts registered map layers
+      panels/                       # UI panels (consume store, no source logic)
+      deck/                         # main deck
+  stores/                           # zustand stores (consume sources, feed components)
+    command.ts
+mini-services/
+  game-engine/                      # dev/mock backend (retained behind config flag)
+```
+
+**What this enables:**
+
+1. **Add AORDF later** → create `src/sources/aordf.source.ts`, register it, swap config flag. No changes to map layers or panels.
+2. **Add a new visualization** (e.g. earnings chart) → create `src/layers/panels/earnings-breakdown.ts`, register it. Subscribes to `earnings:upsert` events from any source.
+3. **Add a future app's data** → create `src/sources/future-app.source.ts`, register it, emit NormalizedEvents. Existing visualizations that subscribe to those event types just work.
+4. **Swap mock for real** → config flag flip. Same events flow through, same visualizations render.
+
+**Migration path (not yet executed):**
+
+1. Create `src/sources/` and `src/layers/` directories
+2. Move `NormalizedEvent` vocabulary from `src/components/command/map/types.ts` → `src/lib/types/events.ts`
+3. Move source adapters from `src/components/command/map/sources/` → `src/sources/`
+4. Move map layers from `src/components/command/map/layers/` → `src/layers/map/`
+5. Move registries from `src/components/command/map/registry/` → `src/sources/registry.ts` + `src/layers/registry.ts`
+6. Apply the Garrison rename (conflict A) during the move
+7. Add config flag for mock-vs-real source selection
+8. Update all imports (~17 files)
+
 ---
 
 ## 8. Consolidated lock list
@@ -438,7 +548,7 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | 2 | VOTC earnings ← AORDF (sole calculator, inputs = uptime + health + other items) | ✅ Locked |
 | 3 | Attacks/defenses ← AORDF (origin), display only in FE | ✅ Locked |
 | 4 | Discovery feed ← AORDF (realtime stream) | ✅ Locked |
-| 5 | SAFEHOUSE placement ← FULL-node device; TACTICAL ← PARTIAL-node device; gated by 42 | ✅ Locked |
+| 5 | SAFEHOUSE placement ← Safehouse (daemon) installed on device; TACTICAL ← Tactical Safehouse (plugin) installed; gated by 42 | ✅ Locked |
 | 6 | Sol cycle ← 42-computed airdrop epoch; hybrid cadence; name "Sol cycle" locked | ✅ Locked |
 | 7 | Placement = once per device, lifetime (enforced by 42) | ✅ Locked |
 | 8 | Attacks cost target faction's token; defenses cost own faction's token; AORDF prices live | ✅ Locked |
@@ -469,13 +579,26 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | 33 | **Rank computation = AORDF.** 42 displays AORDF's rank, doesn't compute it. | ✅ Locked |
 | 34 | Future outposts: outpost number + faction name (e.g., "Outpost 11 Viper"). Story-driven expansion. | ✅ Locked |
 | 35 | **42 has no visibility into outpost/faction assignment.** AORDF owns it entirely. 42 receives user identity (outpost# + faction + moniker) as read-only. | ✅ Locked |
+| 36 | Safehouse = full node (daemon, complete infrastructure). Tactical Safehouse = edge node (plugin, lightweight). The distinction is node class, not just "how it runs." | ✅ Locked |
+| 37 | Faction tokens (FANG, HAMMER, RESOLUTE) + VOTC are SPL tokens on Solana. Token symbol = faction name. | ✅ Locked |
+| 38 | Placed structure interface renamed `Outpost` → **`Garrison`**. Enum `OutpostType` → **`GarrisonType`**. | ✅ Locked |
+| 39 | `GarrisonType` = `"SAFEHOUSE" \| "TACTICAL"` (2 values only; `"FULL"` removed). | ✅ Locked |
+| 40 | New `Outpost` type = top-level group `{ number: number; factionName: string }`. Each `Garrison` has `outpostNumber` referencing it. | ✅ Locked |
+| 41 | **Sources are app-wide** — live in `src/sources/`, not under `components/`. Any component/panel/store can consume any source. | ✅ Locked |
+| 42 | **Source registry is the single point of registration** — new sources added by creating a file + registering, not by editing existing code. | ✅ Locked |
+| 43 | **NormalizedEvent vocabulary is the contract** — lives in `src/lib/types/events.ts`. Sources emit; consumers subscribe. Decoupled. | ✅ Locked |
+| 44 | **Map layers stay map-specific** — under `src/layers/map/`. Non-map visualizations (panels, HUD) get their own subdirectory under `src/layers/`. | ✅ Locked |
+| 45 | **Layer registry is hot-pluggable** — new layers added by creating a file + registering. No edits to existing layer files. | ✅ Locked |
+| 46 | **Mock source is a dev fallback behind a config flag** — `mock.source.ts` retained. Config flag swaps mock for real adapters. | ✅ Locked |
+| 47 | **Multi-app ingestion ready** — future apps feed data by adding a new source adapter, without touching visualization code. | ✅ Locked |
 
 ### Open questions (PENDING — need user confirmation before implementation)
 
 | # | Question | Context | Status |
 |---|---|---|---|
 | Q1 | Can 42 submit actions to AORDF, or must users go to AORDF to launch attacks? | §5.3. Determines whether attack/defend buttons stay in 42 or get removed. | **DEFERRED** — buttons stay as connectors for now; decision later |
-| Q6 | Code conflict: rename current `Outpost` type → `Safehouse`? | §2.10. Current code's `Outpost` = placed structure, but user's "Outpost" = top-level group. Rename touches ~17 files. | **PENDING** |
+| Q7 | MissionType ownership (conflict B): remove hardcoded missions from 42? Keep as dev-mock? Are the 6 names AORDF's canonical names? | §2.10.1. 42 currently hardcodes 6 mission types with labels/durations/costs. AORDF should own these. | **PENDING** |
+| Q8 | Execute the architectural refactor (§7.3) + Garrison rename now? | §7.3. Move sources/layers to app-wide directories, apply Garrison rename, add config flag. ~17 files. | **PENDING** |
 
 ### Resolved questions
 
@@ -490,6 +613,7 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | ~~Q7~~ | ~~How is the codename assigned to a new outpost number?~~ | Not range-based, not independent. Outpost# + faction are fixed properties of the outpost itself. Users join an existing outpost. §2.9. |
 | ~~Q8~~ | ~~What's the user-facing label format for codenames?~~ | "Outpost 33 FANG". User's personal handle = "moniker". §2.6, §2.8. |
 | ~~Q9~~ | ~~What determines the user's rank?~~ | **AORDF** computes rank. 42 displays it. §6.3. |
+| ~~Q6~~ | ~~Code conflict: rename current `Outpost` type → `Safehouse`?~~ | **Resolved: rename to `Garrison` instead** (user chose "garrison type"). `Outpost` → `Garrison`, `OutpostType` → `GarrisonType`, 2 values only. New `Outpost` type for top-level group. §2.10. |
 
 ---
 
@@ -499,13 +623,29 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 
 When implementation begins, the order of operations should be:
 
-1. **Type layer** — apply field renames/removals in `src/lib/types.ts` + `src/lib/factions.ts`
-2. **Backend mock cleanup** — strip BP/sol-tick logic from `mini-services/game-engine/src/`
-3. **Source adapter scaffolding** — create `wallet.source.ts`, `aordf.source.ts`, `sol-cycle.source.ts` (initially as typed stubs returning the right shapes)
-4. **Frontend UI labels** — replace BP labels with token-correct labels in `right-panel.tsx` + `outpost-detail-card.tsx`
-5. **Briefing prompt cleanup** — remove BP from `api/ai/briefing/route.ts` + `api/ai/outpost-briefing/route.ts`
-6. **Placement gate** — add triple-gate to `place-outpost` action
-7. **Live AORDF quote** — wire the cost-determination flow
-8. **Wallet + earnings display** — replace "BUILD PTS" tile with VOTC balance + pending
-9. **Sol cycle display** — add cycle ID + countdown + last-airdrop badge
-10. **Registry swap** — switch from mock game-engine source to real adapters (behind config flag for dev fallback)
+### Phase 1 — Architectural foundation (do first, enables everything else)
+
+1. **Repo restructure** (§7.3) — create `src/sources/`, `src/layers/`, `src/lib/types/` directories; move NormalizedEvent vocabulary to `src/lib/types/events.ts`; move source adapters to `src/sources/`; move map layers to `src/layers/map/`; move registries to `src/sources/registry.ts` + `src/layers/registry.ts`
+2. **Garrison rename** (conflict A, §2.10) — `Outpost` → `Garrison`, `OutpostType` → `GarrisonType` (2 values), new `Outpost` type for top-level group. Apply during the move.
+3. **Config flag** — `NEXT_PUBLIC_DATA_SOURCE=mock|aordf` for swapping mock vs real adapters
+4. **Type layer cleanup** — remove `buildPoints`, rename `sol` → `solCycle`, add `walletVotc`/`pendingVotc`/`ownerName`/`ownerWallet`/`outpostNumber`, split types into `lib/types/*.ts` files
+
+### Phase 2 — Data model + mock cleanup
+
+5. **Backend mock cleanup** — strip BP/sol-tick/accrual logic from `mini-services/game-engine/src/`; mock source becomes a thin dev fallback
+6. **Source adapter scaffolding** — create `wallet.source.ts`, `aordf.source.ts`, `sol-cycle.source.ts`, `identity.source.ts` as typed stubs (initially returning mock data via the mock source, ready to swap to real endpoints)
+7. **MissionType resolution** (conflict B, §2.10.1) — pending user decision on whether to remove hardcoded missions or keep as dev-mock
+
+### Phase 3 — Frontend wiring
+
+8. **Frontend UI labels** — replace BP labels with token-correct labels (target faction token for attacks, own faction token for defenses) in `right-panel.tsx` + `outpost-detail-card.tsx`
+9. **Briefing prompt cleanup** — remove BP from `api/ai/briefing/route.ts` + `api/ai/outpost-briefing/route.ts`
+10. **Placement gate** — add triple-gate (wallet signature + node attestation + device cap) to placement action
+11. **Wallet + earnings display** — replace "BUILD PTS" tile with VOTC balance + pending + per-outpost accrual breakdown (Option B); implement rank-insignia-as-wallet-button (hover=balances, click=actions)
+12. **Sol cycle display** — add cycle ID + countdown + last-airdrop badge
+13. **Live AORDF quote** — wire the cost-determination flow (frontend requests quote, AORDF returns `{ token, amount }`, button displays it)
+
+### Phase 4 — Real backend connection
+
+14. **Swap mock → real** — flip config flag, point source adapters at real AORDF/wallet/42 endpoints
+15. **End-to-end verification** — test each data path against real backends
