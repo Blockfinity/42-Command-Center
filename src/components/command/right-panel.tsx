@@ -18,17 +18,17 @@ const MISSION_ICON: Record<MissionType, React.ElementType> = {
 
 export function RightPanel() {
   const state = useCommand((s) => s.state);
-  const selectedId = useCommand((s) => s.selectedOutpostId);
+  const selectedId = useCommand((s) => s.selectedGarrisonId);
   const pending = useCommand((s) => s.pendingMission);
   const briefing = useCommand((s) => s.briefing);
   const loading = useCommand((s) => s.briefingLoading);
   const fetchBriefing = useCommand((s) => s.fetchBriefing);
   const sendAction = useCommand((s) => s.sendAction);
-  const select = useCommand((s) => s.selectOutpost);
+  const select = useCommand((s) => s.selectGarrison);
   const setPending = useCommand((s) => s.setPendingMission);
 
   if (!state) return null;
-  const sel = state.outposts.find((o) => o.id === selectedId) ?? null;
+  const sel = state.garrisons.find((o) => o.id === selectedId) ?? null;
 
   return (
     <aside className="hidden w-[22rem] shrink-0 flex-col border-l border-white/10 bg-black/60 lg:flex">
@@ -113,24 +113,24 @@ export function RightPanel() {
           </p>
           {!pending.sourceId ? (
             <div className="mt-2 font-mono text-[9px] text-white/50">
-              ◆ SELECT A SOURCE OUTPOST BELOW.
+              ◆ SELECT A SOURCE GARRISON BELOW.
             </div>
           ) : (
             <div className="mt-2 font-mono text-[9px] text-white/70">
-              ◆ SOURCE LOCKED. CLICK A RIVAL OUTPOST ON THE MAP TO COMMIT.
+              ◆ SOURCE LOCKED. CLICK A RIVAL GARRISON ON THE MAP TO COMMIT.
             </div>
           )}
           <SourcePicker />
         </div>
       )}
 
-      {/* Selected outpost detail */}
+      {/* Selected garrison detail */}
       <div className="flex-1 overflow-y-auto thin-scroll">
         {sel ? (
-          <OutpostDetail />
+          <GarrisonDetail />
         ) : (
           <div className="p-6 text-center font-mono text-[9px] tracking-wide-2 text-white/30">
-            ◇ SELECT AN OUTPOST ON THE MAP
+            ◇ SELECT A GARRISON ON THE MAP
             <br />
             <span className="text-white/20">TO INSPECT OR ENGAGE</span>
           </div>
@@ -144,7 +144,7 @@ function SourcePicker() {
   const state = useCommand((s) => s.state)!;
   const pending = useCommand((s) => s.pendingMission)!;
   const setPending = useCommand((s) => s.setPendingMission);
-  const mine = state.outposts.filter(
+  const mine = state.garrisons.filter(
     (o) => o.faction === state.operative.faction && o.status !== "OFFLINE"
   );
   const isSelf = pending.type === "BUILD" || pending.type === "DEFEND" || pending.type === "RECON";
@@ -185,12 +185,12 @@ function SourcePicker() {
   );
 }
 
-function OutpostDetail() {
+function GarrisonDetail() {
   const state = useCommand((s) => s.state)!;
-  const selectedId = useCommand((s) => s.selectedOutpostId)!;
+  const selectedId = useCommand((s) => s.selectedGarrisonId)!;
   const sendAction = useCommand((s) => s.sendAction);
   const setPending = useCommand((s) => s.setPendingMission);
-  const op = state.outposts.find((o) => o.id === selectedId)!;
+  const op = state.garrisons.find((o) => o.id === selectedId)!;
   const isMine = op.faction === state.operative.faction;
   const healthPct = (op.health / op.maxHealth) * 100;
   const upgradeCost = 50 + op.level * 25;
@@ -202,7 +202,7 @@ function OutpostDetail() {
         <div>
           <div className="flex items-center gap-1.5 font-mono text-[8px] tracking-mega text-white/45">
             <span className="text-white/65">{FACTION_MARK_GLYPH[op.faction]}</span> {op.faction} ·{" "}
-            {op.type === "FULL" ? "FULL OUTPOST" : "TACTICAL OUTPOST"}
+            {op.type === "Safehouse" ? "SAFEHOUSE" : "TACTICAL SAFEHOUSE"}
           </div>
           <div className="font-mono text-[14px] font-bold tracking-wide-2 text-white text-glow">{op.name}</div>
           <div className="font-mono text-[9px] text-white/40">
@@ -268,7 +268,7 @@ function OutpostDetail() {
               label={`UPGRADE TO LV ${op.level + 1}`}
               meta={`${upgradeCost} BP`}
               disabled={op.buildPoints < upgradeCost}
-              onClick={() => sendAction({ kind: "upgrade-outpost", id: op.id })}
+              onClick={() => sendAction({ kind: "upgrade-garrison", id: op.id })}
             />
           </>
         ) : (

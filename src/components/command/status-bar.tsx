@@ -22,8 +22,8 @@ export function StatusBar() {
   }
   const myFaction = state.factions[state.operative.faction];
   const activeMissions = state.missions.filter((m) => m.status === "ACTIVE").length;
-  const underAttack = state.outposts.filter((o) => o.status === "UNDER_ATTACK").length;
-  const offline = state.outposts.filter((o) => o.status === "OFFLINE").length;
+  const underAttack = state.garrisons.filter((o) => o.status === "UNDER_ATTACK").length;
+  const offline = state.garrisons.filter((o) => o.status === "OFFLINE").length;
 
   const tickerItems = [
     `SOL ${state.sol}`,

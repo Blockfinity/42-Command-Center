@@ -28,7 +28,7 @@ export function BrandArea() {
 
   const fac = state.factions[data.faction];
   const meta = FACTION_META[data.faction];
-  const myOutposts = state.outposts.filter((o) => o.faction === data.faction);
+  const myGarrisons = state.garrisons.filter((o) => o.faction === data.faction);
   const opNumber = outpostNumberStr(data.faction);
 
   const detail = (
@@ -44,7 +44,7 @@ export function BrandArea() {
       <DetailNote>
         <span className="text-white/70">“{meta.motto}”</span>
         <br />
-        <span className="text-white/35">{NETWORK_CURRENCY} NETWORK · {myOutposts.length} NODES</span>
+        <span className="text-white/35">{NETWORK_CURRENCY} NETWORK · {myGarrisons.length} NODES</span>
       </DetailNote>
     </>
   );

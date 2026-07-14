@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Territory layer — control polygons + per-outpost influence halos.
+// Territory layer — control polygons + per-garrison influence halos.
 //
 // Consumes source: "game:territories" (merged polygons + halos).
 // Renders: territory fill (opacity by control %), territory outline (dashed
@@ -85,7 +85,7 @@ export const territoryLayer: MapLayerSpec = {
       /* Noto Sans not available */
     }
 
-    // --- Per-outpost influence halos: faint fill + dashed outline ---
+    // --- Per-garrison influence halos: faint fill + dashed outline ---
     map.addLayer({
       id: "halos-fill",
       type: "fill",

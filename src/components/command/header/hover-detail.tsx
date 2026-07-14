@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  * anchored just below the trigger. On mouse leave (after a short close delay
  * so the cursor can travel into the panel), it fades out smoothly.
  *
- * Intentionally smaller and lighter than the OutpostDetailCard quick-view:
+ * Intentionally smaller and lighter than the GarrisonDetailCard quick-view:
  *   • w-64 (256px) vs w-80 (320px)
  *   • pure fade + 4px translate, 160ms
  *   • no close button, no pointer-down listener — hover-gated only

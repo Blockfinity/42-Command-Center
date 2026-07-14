@@ -25,6 +25,6 @@ export const NAV_ITEMS: {
   { view: "QUEUE", icon: ListChecks, label: "Mission Queue", hotkey: "4" },
   { view: "AI", icon: BrainCircuit, label: "AI Briefing", hotkey: "5" },
   { view: "INTEL", icon: ScanEye, label: "Faction Intel", hotkey: "6" },
-  { view: "DEPLOY", icon: Rocket, label: "Deploy Outpost", hotkey: "7" },
+  { view: "DEPLOY", icon: Rocket, label: "Deploy Garrison", hotkey: "7" },
   { view: "CONFIG", icon: Terminal, label: "System Config", hotkey: "8" },
 ];

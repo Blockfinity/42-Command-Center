@@ -8,12 +8,12 @@ import { NavRail, type NavView } from "@/components/command/nav-rail";
 import { LeftPanel } from "@/components/command/left-panel";
 import { StatusBar } from "@/components/command/status-bar";
 import { BootScreen } from "@/components/command/boot-screen";
-import { OutpostDetailCard } from "@/components/command/outpost-detail-card";
+import { GarrisonDetailCard } from "@/components/command/outpost-detail-card";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import { useSfx } from "@/hooks/use-sfx";
 import { useClockData } from "@/components/command/header/clock-area.data";
-import { MISSION_META, type OutpostType } from "@/lib/types";
+import { MISSION_META, type GarrisonType } from "@/lib/types";
 
 // MapView is client-only (MapLibre WebGL) — load dynamically.
 // This is the modular map platform: src/components/command/map/
@@ -26,8 +26,8 @@ export function CommandDeck() {
   const state = useCommand((s) => s.state);
   const init = useCommand((s) => s.init);
   const connected = useCommand((s) => s.connected);
-  const selectedId = useCommand((s) => s.selectedOutpostId);
-  const select = useCommand((s) => s.selectOutpost);
+  const selectedId = useCommand((s) => s.selectedGarrisonId);
+  const select = useCommand((s) => s.selectGarrison);
   const pending = useCommand((s) => s.pendingMission);
   const setPending = useCommand((s) => s.setPendingMission);
   const placement = useCommand((s) => s.placementMode);
@@ -120,13 +120,13 @@ export function CommandDeck() {
     setView(v);
   }
 
-  // ---- outpost selection ----
-  function handleOutpostSelect(id: string | null) {
+  // ---- garrison selection ----
+  function handleGarrisonSelect(id: string | null) {
     if (!id) {
       select(null);
       return;
     }
-    const target = state?.outposts.find((o) => o.id === id);
+    const target = state?.garrisons.find((o) => o.id === id);
     if (!target || !state) {
       select(id);
       return;
@@ -134,7 +134,7 @@ export function CommandDeck() {
     // pending strike flow — don't toggle-close mid-strike
     if (pending && pending.sourceId) {
       const isAggressive = ["DRONE_STRIKE", "CYBER_ATTACK", "ESPIONAGE"].includes(pending.type);
-      const srcMine = state.outposts.find((o) => o.id === pending.sourceId)?.faction === state.operative.faction;
+      const srcMine = state.garrisons.find((o) => o.id === pending.sourceId)?.faction === state.operative.faction;
       if (isAggressive && target.faction !== state.operative.faction && srcMine) {
         sendAction({
           kind: "launch-mission",
@@ -152,7 +152,7 @@ export function CommandDeck() {
         return;
       }
     }
-    // toggle: clicking the already-selected outpost closes the quick view
+    // toggle: clicking the already-selected garrison closes the quick view
     if (id === selectedId) {
       sfx.play("click");
       select(null);
@@ -164,29 +164,29 @@ export function CommandDeck() {
 
   function handleMapClick(lat: number, lng: number) {
     if (!placement) return;
-    const type: OutpostType = placement.type;
-    sendAction({ kind: "place-outpost", type, lat, lng });
+    const type: GarrisonType = placement.type;
+    sendAction({ kind: "place-garrison", type, lat, lng });
     sfx.play("place");
     toast({
-      title: "OUTPOST DEPLOYED",
-      description: `${type === "FULL" ? "Full outpost" : "Tactical outpost"} at ${lat.toFixed(2)}°, ${lng.toFixed(2)}°`,
+      title: "GARRISON DEPLOYED",
+      description: `${type === "Safehouse" ? "Safehouse" : "Tactical Safehouse"} at ${lat.toFixed(2)}°, ${lng.toFixed(2)}°`,
     });
     setPlacement(null);
   }
 
   const hasState = !!state;
 
-  // ---- compute initial map center from operative's home outpost ----
+  // ---- compute initial map center from operative's home garrison ----
   const initialCenter: [number, number] = React.useMemo(() => {
     if (!state) return [-32, 8];
-    const mine = state.outposts.find(
-      (o) => o.faction === state.operative.faction && o.type === "FULL",
+    const mine = state.garrisons.find(
+      (o) => o.faction === state.operative.faction && o.type === "Safehouse",
     );
     return mine ? [mine.lng, mine.lat] : [-32, 8];
   }, [state]);
 
-  // ---- outpost detail card (shown for any selected outpost) ----
-  const selectedOutpost = selectedId ? state?.outposts.find((o) => o.id === selectedId) ?? null : null;
+  // ---- garrison detail card (shown for any selected garrison) ----
+  const selectedGarrison = selectedId ? state?.garrisons.find((o) => o.id === selectedId) ?? null : null;
 
   // ---- render ----
   return (
@@ -209,7 +209,7 @@ export function CommandDeck() {
             <MapView
               initialCenter={initialCenter}
               selectedId={selectedId}
-              onSelect={handleOutpostSelect}
+              onSelect={handleGarrisonSelect}
               onMapClick={handleMapClick}
               placementMode={!!placement}
             />
@@ -218,7 +218,7 @@ export function CommandDeck() {
             {state && (
               <>
                 <div className="pointer-events-none absolute right-4 top-20 font-mono text-[10px] tracking-mega text-white/45">
-                  {state.outposts.length} NODES · {state.missions.filter((m) => m.status === "ACTIVE").length} OPS
+                  {state.garrisons.length} NODES · {state.missions.filter((m) => m.status === "ACTIVE").length} OPS
                 </div>
                 {clock && (
                   <div className="pointer-events-none absolute bottom-12 left-20 font-mono text-[10px] tracking-mega text-white/45">
@@ -232,15 +232,15 @@ export function CommandDeck() {
                 )}
                 {pending && pending.sourceId && (
                   <div className="pointer-events-none absolute bottom-16 left-1/2 -translate-x-1/2 border border-white/30 bg-black/70 px-4 py-1.5 font-mono text-[10px] tracking-wide-2 text-white backdrop-blur">
-                    ◆ {MISSION_META[pending.type].label} ARMED · CLICK RIVAL OUTPOST TO COMMIT
+                    ◆ {MISSION_META[pending.type].label} ARMED · CLICK RIVAL GARRISON TO COMMIT
                   </div>
                 )}
               </>
             )}
 
-            {/* Outpost detail card — free-floating quick view for any selected outpost. */}
-            <OutpostDetailCard
-              outpost={selectedOutpost}
+            {/* Garrison detail card — free-floating quick view for any selected garrison. */}
+            <GarrisonDetailCard
+              garrison={selectedGarrison}
               onClose={() => select(null)}
             />
           </main>

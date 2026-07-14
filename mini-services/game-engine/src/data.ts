@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Static world data — territory definitions, outpost seeds, ping type weights.
+// Static world data — territory definitions, garrison seeds, ping type weights.
 // Extracted from index.ts for separation of data from logic.
 // ---------------------------------------------------------------------------
 
-import type { FactionId } from "../../../src/lib/types";
+import type { FactionId, GarrisonType } from "../../../src/lib/types";
 import { FACTION_META } from "../../../src/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ export function pickWeightedPingType(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Initial world state — 3 factions with outposts seeded across the globe
+// Initial world state — 3 factions with garrisons seeded across the globe
 // ---------------------------------------------------------------------------
 export const FACTION_SEED: Record<FactionId, { name: string; motto: string }> = {
   FANG: FACTION_META.FANG,
@@ -152,31 +152,31 @@ export const FACTION_SEED: Record<FactionId, { name: string; motto: string }> = 
 export interface SeedSpec {
   name: string;
   faction: FactionId;
-  type: "FULL" | "TACTICAL";
+  type: GarrisonType;
   lat: number;
   lng: number;
 }
 
-export const OUTPOST_SEED: SeedSpec[] = [
+export const GARRISON_SEED: SeedSpec[] = [
   // FANG — pack hunters, distributed across stable datacenter corridors
-  { name: "Fang Prime", faction: "FANG", type: "FULL", lat: 40.71, lng: -74.0 },     // New York
-  { name: "Fang West", faction: "FANG", type: "FULL", lat: 51.5, lng: -0.12 },       // London
-  { name: "Fang Delta", faction: "FANG", type: "TACTICAL", lat: 35.68, lng: 139.69 },// Tokyo
-  { name: "Fang Vault", faction: "FANG", type: "TACTICAL", lat: 25.2, lng: 55.27 },  // Dubai
-  { name: "Fang South", faction: "FANG", type: "TACTICAL", lat: -33.86, lng: 151.2 },// Sydney
+  { name: "Fang Prime", faction: "FANG", type: "Safehouse", lat: 40.71, lng: -74.0 },     // New York
+  { name: "Fang West", faction: "FANG", type: "Safehouse", lat: 51.5, lng: -0.12 },       // London
+  { name: "Fang Delta", faction: "FANG", type: "Tactical Safehouse", lat: 35.68, lng: 139.69 },// Tokyo
+  { name: "Fang Vault", faction: "FANG", type: "Tactical Safehouse", lat: 25.2, lng: 55.27 },  // Dubai
+  { name: "Fang South", faction: "FANG", type: "Tactical Safehouse", lat: -33.86, lng: 151.2 },// Sydney
 
   // HAMMER — aggressive, mobile, coastal strike nodes
-  { name: "Hammer Anvil", faction: "HAMMER", type: "FULL", lat: 37.77, lng: -122.4 },  // San Francisco
-  { name: "Hammer Forge", faction: "HAMMER", type: "FULL", lat: 59.33, lng: 18.06 },    // Stockholm
-  { name: "Hammer Reach", faction: "HAMMER", type: "TACTICAL", lat: 1.35, lng: 103.81 },// Singapore
-  { name: "Hammer Cape", faction: "HAMMER", type: "TACTICAL", lat: -34.6, lng: -58.38 },// Buenos Aires
-  { name: "Hammer Reef", faction: "HAMMER", type: "TACTICAL", lat: -22.9, lng: -43.2 },// Rio fallback (close to cape)
-  { name: "Hammer Horn", faction: "HAMMER", type: "TACTICAL", lat: 55.75, lng: 37.61 },// Moscow
+  { name: "Hammer Anvil", faction: "HAMMER", type: "Safehouse", lat: 37.77, lng: -122.4 },  // San Francisco
+  { name: "Hammer Forge", faction: "HAMMER", type: "Safehouse", lat: 59.33, lng: 18.06 },    // Stockholm
+  { name: "Hammer Reach", faction: "HAMMER", type: "Tactical Safehouse", lat: 1.35, lng: 103.81 },// Singapore
+  { name: "Hammer Cape", faction: "HAMMER", type: "Tactical Safehouse", lat: -34.6, lng: -58.38 },// Buenos Aires
+  { name: "Hammer Reef", faction: "HAMMER", type: "Tactical Safehouse", lat: -22.9, lng: -43.2 },// Rio fallback (close to cape)
+  { name: "Hammer Horn", faction: "HAMMER", type: "Tactical Safehouse", lat: 55.75, lng: 37.61 },// Moscow
 
   // RESOLUTE — steadfast, frontier, offshore
-  { name: "Resolute Stand", faction: "RESOLUTE", type: "FULL", lat: 22.32, lng: 114.17 },   // Hong Kong
-  { name: "Resolute Watch", faction: "RESOLUTE", type: "FULL", lat: 41.01, lng: 28.97 },     // Istanbul
-  { name: "Resolute Drift", faction: "RESOLUTE", type: "TACTICAL", lat: 6.52, lng: 3.37 },  // Lagos
-  { name: "Resolute Mirage", faction: "RESOLUTE", type: "TACTICAL", lat: 30.04, lng: 31.23 },// Cairo
-  { name: "Resolute Glacier", faction: "RESOLUTE", type: "TACTICAL", lat: 64.13, lng: -21.94 },// Reykjavik
+  { name: "Resolute Stand", faction: "RESOLUTE", type: "Safehouse", lat: 22.32, lng: 114.17 },   // Hong Kong
+  { name: "Resolute Watch", faction: "RESOLUTE", type: "Safehouse", lat: 41.01, lng: 28.97 },     // Istanbul
+  { name: "Resolute Drift", faction: "RESOLUTE", type: "Tactical Safehouse", lat: 6.52, lng: 3.37 },  // Lagos
+  { name: "Resolute Mirage", faction: "RESOLUTE", type: "Tactical Safehouse", lat: 30.04, lng: 31.23 },// Cairo
+  { name: "Resolute Glacier", faction: "RESOLUTE", type: "Tactical Safehouse", lat: 64.13, lng: -21.94 },// Reykjavik
 ];

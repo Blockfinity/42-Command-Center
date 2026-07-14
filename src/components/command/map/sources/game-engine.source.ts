@@ -14,8 +14,8 @@
 //   No second socket connection — single source of truth.
 //
 // The adapter emits to 4 source IDs:
-//   - "game:outposts"     — outpost points (clustered)
-//   - "game:territories"  — territory control polygons + per-outpost halos
+//   - "game:garrisons"    — garrison points (clustered)
+//   - "game:territories"  — territory control polygons + per-garrison halos
 //   - "game:missions"     — mission arcs + impact points + progress heads
 //   - "game:pings"        — activity pings (transient sonar layer)
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ import type { GeoJSON } from "geojson";
 import type { MapSourceSpec, NormalizedEvent } from "../types";
 import type { GameState } from "@/lib/types";
 import {
-  outpostsToGeoJSON,
+  garrisonsToGeoJSON,
   halosToGeoJSON,
   missionsToGeoJSON,
   progressHeadsToGeoJSON,
@@ -39,7 +39,7 @@ import { useCommand } from "@/stores/command";
 
 /** The 4 source IDs this adapter emits. Layers reference these in sourceIds. */
 export const GAME_SOURCE_IDS = {
-  outposts: "game:outposts",
+  garrisons: "game:garrisons",
   territories: "game:territories",
   missions: "game:missions",
   pings: "game:pings",
@@ -57,16 +57,16 @@ function gameStateToSources(
   selectedId: string | null,
   now: number,
 ): Record<string, GeoJSON.FeatureCollection> {
-  // ---- Outposts ----
-  const outpostsFC = outpostsToGeoJSON(state.outposts, state.operative.faction, selectedId);
+  // ---- Garrisons ----
+  const garrisonsFC = garrisonsToGeoJSON(state.garrisons, state.operative.faction, selectedId);
 
-  // ---- Territories (control polygons + per-outpost halos, merged) ----
+  // ---- Territories (control polygons + per-garrison halos, merged) ----
   const territoriesFC = territoriesToGeoJSON(state.territories);
   // Tag territory features with kind="territory"
   for (const f of territoriesFC.features) {
     (f.properties as Record<string, unknown>) = { ...(f.properties ?? {}), kind: "territory" };
   }
-  const halosFC = halosToGeoJSON(state.outposts);
+  const halosFC = halosToGeoJSON(state.garrisons);
   // Tag halo features with kind="halo"
   for (const f of halosFC.features) {
     (f.properties as Record<string, unknown>) = { ...(f.properties ?? {}), kind: "halo" };
@@ -77,7 +77,7 @@ function gameStateToSources(
   };
 
   // ---- Missions (arcs + impacts + progress heads, merged) ----
-  const mg = missionsToGeoJSON(state.missions, state.outposts);
+  const mg = missionsToGeoJSON(state.missions, state.garrisons);
   // Tag arc features with kind="arc" + aggressive flag
   for (const f of mg.aggressive.features) {
     (f.properties as Record<string, unknown>) = { ...(f.properties ?? {}), kind: "arc", aggressive: 1 };
@@ -85,11 +85,11 @@ function gameStateToSources(
   for (const f of mg.passive.features) {
     (f.properties as Record<string, unknown>) = { ...(f.properties ?? {}), kind: "arc", aggressive: 0 };
   }
-  const impactsFC = missionImpactsToGeoJSON(state.missions, state.outposts);
+  const impactsFC = missionImpactsToGeoJSON(state.missions, state.garrisons);
   for (const f of impactsFC.features) {
     (f.properties as Record<string, unknown>) = { ...(f.properties ?? {}), kind: "impact" };
   }
-  const progressFC = progressHeadsToGeoJSON(state.missions, state.outposts);
+  const progressFC = progressHeadsToGeoJSON(state.missions, state.garrisons);
   for (const f of progressFC.features) {
     (f.properties as Record<string, unknown>) = { ...(f.properties ?? {}), kind: "progress" };
   }
@@ -109,7 +109,7 @@ function gameStateToSources(
   const pingsFC = pingsToGeoJSON(state.activityPings ?? [], { lng: 0, lat: 0 }, now);
 
   return {
-    [GAME_SOURCE_IDS.outposts]: outpostsFC,
+    [GAME_SOURCE_IDS.garrisons]: garrisonsFC,
     [GAME_SOURCE_IDS.territories]: mergedTerritories,
     [GAME_SOURCE_IDS.missions]: mergedMissions,
     [GAME_SOURCE_IDS.pings]: pingsFC,
@@ -132,13 +132,13 @@ export const gameEngineSource: MapSourceSpec = {
 
     // ---- Subscribe to the zustand store ----
     // The store holds the single socket connection (created by command-deck's init()).
-    // We watch state + selectedOutpostId changes and re-emit.
+    // We watch state + selectedGarrisonId changes and re-emit.
     const unsubState = useCommand.subscribe((s, prev) => {
       if (s.state !== prev.state && s.state) {
-        currentSelected = s.selectedOutpostId;
+        currentSelected = s.selectedGarrisonId;
         emitState(s.state);
-      } else if (s.selectedOutpostId !== prev.selectedOutpostId && s.state) {
-        currentSelected = s.selectedOutpostId;
+      } else if (s.selectedGarrisonId !== prev.selectedGarrisonId && s.state) {
+        currentSelected = s.selectedGarrisonId;
         emitState(s.state);
       }
     });
@@ -146,7 +146,7 @@ export const gameEngineSource: MapSourceSpec = {
     // Emit initial state if already available (e.g. hot-reload).
     const initial = useCommand.getState().state;
     if (initial) {
-      currentSelected = useCommand.getState().selectedOutpostId;
+      currentSelected = useCommand.getState().selectedGarrisonId;
       emitState(initial);
     }
 

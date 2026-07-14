@@ -3,7 +3,7 @@ import { useCommand } from "@/stores/command";
 /**
  * useStatsData — data source for the StatsArea header component.
  *
- * Returns the operative-faction outpost/compute aggregates shown in the live
+ * Returns the operative-faction garrison/compute aggregates shown in the live
  * status cluster (ACTIVE NODES / ELITE / COMPUTE / SOL), or `null` while the
  * game state handshake is in flight.
  *
@@ -28,12 +28,12 @@ export function useStatsData(): StatsData | null {
 
   const op = state.operative;
   const myFaction = state.factions[op.faction];
-  const myOutposts = state.outposts.filter((o) => o.faction === op.faction);
+  const myGarrisons = state.garrisons.filter((o) => o.faction === op.faction);
 
   return {
-    activeNodes: myOutposts.filter((o) => o.status !== "OFFLINE").length,
-    totalNodes: myOutposts.length,
-    eliteCount: myOutposts.filter((o) => o.type === "FULL").length,
+    activeNodes: myGarrisons.filter((o) => o.status !== "OFFLINE").length,
+    totalNodes: myGarrisons.length,
+    eliteCount: myGarrisons.filter((o) => o.type === "Safehouse").length,
     compute: myFaction.compute,
     sol: state.sol,
   };

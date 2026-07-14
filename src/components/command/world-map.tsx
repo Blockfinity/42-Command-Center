@@ -6,7 +6,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSON } from "geojson";
 import type {
   GameState,
-  Outpost,
   FactionId,
   ActivityPing,
 } from "@/lib/types";
@@ -14,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { formatTotalActions } from "@/lib/map/geo";
 import { mapStyle, makeFactionIcon } from "@/lib/map/style";
 import {
-  outpostsToGeoJSON,
+  garrisonsToGeoJSON,
   halosToGeoJSON,
   missionsToGeoJSON,
   progressHeadsToGeoJSON,
@@ -28,11 +27,11 @@ import { addGameplaySources, addGameplayLayers } from "@/lib/map/layers";
 // ---------------------------------------------------------------------------
 // PERFORMANCE / SCALING NOTES
 // ---------------------------------------------------------------------------
-// At true scale, outposts cluster into region aggregates, pings are downsampled
+// At true scale, garrisons cluster into region aggregates, pings are downsampled
 // by viewport, and the engine would emit deltas. This client renders the visible
 // hemisphere only — pings outside ~100° of map center are dropped (equirectangular
 // distance check), mission arcs are only built for ACTIVE/COMPLETE missions, and
-// outpost clustering collapses dense regions into single circle+count markers
+// garrison clustering collapses dense regions into single circle+count markers
 // below zoom 5. The rAF animation loops are throttled to 12–20fps so the render
 // cost stays bounded even with hundreds of moving pings.
 // ---------------------------------------------------------------------------
@@ -71,7 +70,7 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
   } | null>(null);
   const activityPingsRef = React.useRef<ActivityPing[]>(state.activityPings ?? []);
   const missionsRef = React.useRef(state.missions);
-  const outpostsRef = React.useRef(state.outposts);
+  const garrisonsRef = React.useRef(state.garrisons);
   const lastProgressUpdateRef = React.useRef<number>(0);
   const lastPingUpdateRef = React.useRef<number>(0);
   const [bearing, setBearing] = React.useState(0);
@@ -83,7 +82,7 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
   React.useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   React.useEffect(() => { activityPingsRef.current = state.activityPings ?? []; }, [state.activityPings]);
   React.useEffect(() => { missionsRef.current = state.missions; }, [state.missions]);
-  React.useEffect(() => { outpostsRef.current = state.outposts; }, [state.outposts]);
+  React.useEffect(() => { garrisonsRef.current = state.garrisons; }, [state.garrisons]);
 
   // ---- Territory control summary for HUD (recomputed when territories change) ----
   const territorySummary = React.useMemo(() => {
@@ -99,8 +98,8 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
   React.useEffect(() => {
     if (!containerRef.current) return;
 
-    const mine = state.outposts.find(
-      (o) => o.faction === state.operative.faction && o.type === "FULL"
+    const mine = state.garrisons.find(
+      (o) => o.faction === state.operative.faction && o.type === "Safehouse"
     );
     const center: [number, number] = mine ? [mine.lng, mine.lat] : [-32, 8];
     const INITIAL_ZOOM = 1.6;
@@ -154,8 +153,8 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
       // INTERACTION
       // ===========================================================
 
-      // Click on a single outpost → select it
-      map.on("click", "outpost-shape", (e: maplibregl.MapMouseEvent & { features?: any[] }) => {
+      // Click on a single garrison → select it
+      map.on("click", "garrison-shape", (e: maplibregl.MapMouseEvent & { features?: any[] }) => {
         if (placementRef.current) return;
         e.preventDefault();
         const f = e.features?.[0];
@@ -165,7 +164,7 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
         }
       });
       // Also allow clicking the health ring (slightly larger hit area)
-      map.on("click", "outpost-health-ring", (e: maplibregl.MapMouseEvent & { features?: any[] }) => {
+      map.on("click", "garrison-health-ring", (e: maplibregl.MapMouseEvent & { features?: any[] }) => {
         if (placementRef.current) return;
         e.preventDefault();
         const f = e.features?.[0];
@@ -176,38 +175,38 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
       });
 
       // Click on a cluster → zoom in to expand
-      map.on("click", "outpost-clusters", (e: maplibregl.MapMouseEvent & { features?: any[] }) => {
+      map.on("click", "garrison-clusters", (e: maplibregl.MapMouseEvent & { features?: any[] }) => {
         e.preventDefault();
         const f = e.features?.[0];
         if (!f) return;
         const clusterId = f.properties?.cluster_id as number;
-        const src = map.getSource("outposts") as maplibregl.GeoJSONSource;
+        const src = map.getSource("garrisons") as maplibregl.GeoJSONSource;
         src.getClusterExpansionZoom(clusterId).then((zoom) => {
           map.easeTo({ center: [f.geometry.coordinates[0], f.geometry.coordinates[1]], zoom: Math.max(zoom, 3) });
         });
       });
 
-      // Click on empty map → either place an outpost (placement mode) or
+      // Click on empty map → either place a garrison (placement mode) or
       // reset the world back to its home position + axis (bearing/pitch).
       map.on("click", (e: maplibregl.MapMouseEvent) => {
-        // Layer-specific handlers (outpost-shape / health-ring / clusters)
+        // Layer-specific handlers (garrison-shape / health-ring / clusters)
         // call e.preventDefault() when they handle a hit, which stops this
         // map-level handler from firing. We still query as a belt-and-
-        // suspenders guard so a click on any outpost/cluster never resets.
+        // suspenders guard so a click on any garrison/cluster never resets.
         const feats = map.queryRenderedFeatures(e.point, {
-          layers: ["outpost-shape", "outpost-health-ring", "outpost-clusters"],
+          layers: ["garrison-shape", "garrison-health-ring", "garrison-clusters"],
         });
         if (feats.length > 0) return;
 
         if (placementRef.current) {
-          // Deploy-outpost mode → forward the clicked coord to the parent
+          // Deploy-garrison mode → forward the clicked coord to the parent
           onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
           return;
         }
 
         // Empty-ocean click (not placing) → reset world position + axis.
         // Ease center/zoom/bearing/pitch back to the boot camera and dismiss
-        // any selected outpost. Setting lastInteractRef pauses the auto-rotate
+        // any selected garrison. Setting lastInteractRef pauses the auto-rotate
         // loop for 3.5s — more than enough cover for the 900ms ease, so the
         // globe doesn't fight the reset with its own per-frame jumpTo.
         // NOTE: do NOT call map.stop() here — calling stop() in the same tick
@@ -228,12 +227,12 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
       // Hover cursor
       const setPointer = () => { map.getCanvas().style.cursor = placementRef.current ? "crosshair" : "pointer"; };
       const setGrab = () => { map.getCanvas().style.cursor = placementRef.current ? "crosshair" : "grab"; };
-      map.on("mouseenter", "outpost-shape", setPointer);
-      map.on("mouseenter", "outpost-health-ring", setPointer);
-      map.on("mouseenter", "outpost-clusters", setPointer);
-      map.on("mouseleave", "outpost-shape", setGrab);
-      map.on("mouseleave", "outpost-health-ring", setGrab);
-      map.on("mouseleave", "outpost-clusters", setGrab);
+      map.on("mouseenter", "garrison-shape", setPointer);
+      map.on("mouseenter", "garrison-health-ring", setPointer);
+      map.on("mouseenter", "garrison-clusters", setPointer);
+      map.on("mouseleave", "garrison-shape", setGrab);
+      map.on("mouseleave", "garrison-health-ring", setGrab);
+      map.on("mouseleave", "garrison-clusters", setGrab);
       map.getCanvas().style.cursor = "grab";
 
       // Track center/bearing for readout
@@ -269,10 +268,10 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
       const pulse = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
       const radiusBoost = 4 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
       const map = mapRef.current;
-      if (map && map.getLayer("outpost-pulse")) {
+      if (map && map.getLayer("garrison-pulse")) {
         try {
-          map.setPaintProperty("outpost-pulse", "circle-opacity", pulse);
-          map.setPaintProperty("outpost-pulse", "circle-radius", ["interpolate", ["linear"], ["zoom"], 0, 14 + radiusBoost, 4, 22 + radiusBoost, 8, 34 + radiusBoost]);
+          map.setPaintProperty("garrison-pulse", "circle-opacity", pulse);
+          map.setPaintProperty("garrison-pulse", "circle-radius", ["interpolate", ["linear"], ["zoom"], 0, 14 + radiusBoost, 4, 22 + radiusBoost, 8, 34 + radiusBoost]);
         } catch { /* layer not ready */ }
       }
       // Pulsing impact glow at aggressive-mission targets
@@ -313,21 +312,21 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
     };
   }, []);
 
-  // ---- Sync outposts source when state/selection changes ----
+  // ---- Sync garrisons source when state/selection changes ----
   React.useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.getSource("outposts")) return;
-    const src = map.getSource("outposts") as maplibregl.GeoJSONSource;
-    src.setData(outpostsToGeoJSON(state.outposts, state.operative.faction, selectedId) as unknown as GeoJSON.GeoJSON);
-  }, [state.outposts, state.operative.faction, selectedId]);
+    if (!map || !map.getSource("garrisons")) return;
+    const src = map.getSource("garrisons") as maplibregl.GeoJSONSource;
+    src.setData(garrisonsToGeoJSON(state.garrisons, state.operative.faction, selectedId) as unknown as GeoJSON.GeoJSON);
+  }, [state.garrisons, state.operative.faction, selectedId]);
 
   // ---- Sync territory halos ----
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getSource("halos")) return;
     const src = map.getSource("halos") as maplibregl.GeoJSONSource;
-    src.setData(halosToGeoJSON(state.outposts) as unknown as GeoJSON.GeoJSON);
-  }, [state.outposts]);
+    src.setData(halosToGeoJSON(state.garrisons) as unknown as GeoJSON.GeoJSON);
+  }, [state.garrisons]);
 
   // ---- Sync territory control polygons (NEW) ----
   React.useEffect(() => {
@@ -341,15 +340,15 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getSource("vectors-agg")) return;
-    const mg = missionsToGeoJSON(state.missions, state.outposts);
+    const mg = missionsToGeoJSON(state.missions, state.garrisons);
     (map.getSource("vectors-agg") as maplibregl.GeoJSONSource).setData(mg.aggressive as unknown as GeoJSON.GeoJSON);
     (map.getSource("vectors-pass") as maplibregl.GeoJSONSource).setData(mg.passive as unknown as GeoJSON.GeoJSON);
     if (map.getSource("vectors-agg-impact")) {
       (map.getSource("vectors-agg-impact") as maplibregl.GeoJSONSource).setData(
-        missionImpactsToGeoJSON(state.missions, state.outposts) as unknown as GeoJSON.GeoJSON,
+        missionImpactsToGeoJSON(state.missions, state.garrisons) as unknown as GeoJSON.GeoJSON,
       );
     }
-  }, [state.missions, state.outposts]);
+  }, [state.missions, state.garrisons]);
 
   // ---- Live source pump (progress heads + activity pings) ----
   // A single setInterval drives both transient layers. setInterval (vs rAF
@@ -375,7 +374,7 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
         if (map.getSource("progress-heads")) {
           const src = map.getSource("progress-heads") as maplibregl.GeoJSONSource;
           src.setData(
-            progressHeadsToGeoJSON(missionsRef.current, outpostsRef.current) as unknown as GeoJSON.GeoJSON,
+            progressHeadsToGeoJSON(missionsRef.current, garrisonsRef.current) as unknown as GeoJSON.GeoJSON,
           );
         }
       } catch {
@@ -424,7 +423,7 @@ export function WorldMap({ state, selectedId, onSelect, onMapClick, placementMod
       {/* Placement hint */}
       {placementMode && (
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 border border-white/30 bg-black/70 px-3 py-1.5 font-mono text-[10px] tracking-[0.2em] text-white/90 backdrop-blur">
-          CLICK GLOBE TO DEPLOY OUTPOST · ESC TO CANCEL
+          CLICK GLOBE TO DEPLOY GARRISON · ESC TO CANCEL
         </div>
       )}
     </div>

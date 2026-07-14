@@ -21,19 +21,19 @@ export function StatsArea() {
   if (!data || !state) return null;
 
   const op = state.operative;
-  const myOutposts = state.outposts.filter((o) => o.faction === op.faction);
-  const full = myOutposts.filter((o) => o.type === "FULL").length;
-  const tactical = myOutposts.filter((o) => o.type === "TACTICAL").length;
-  const offline = myOutposts.filter((o) => o.status === "OFFLINE").length;
-  const underAttack = myOutposts.filter((o) => o.status === "UNDER_ATTACK").length;
-  const degraded = myOutposts.filter((o) => o.status === "DEGRADED").length;
+  const myGarrisons = state.garrisons.filter((o) => o.faction === op.faction);
+  const full = myGarrisons.filter((o) => o.type === "Safehouse").length;
+  const tactical = myGarrisons.filter((o) => o.type === "Tactical Safehouse").length;
+  const offline = myGarrisons.filter((o) => o.status === "OFFLINE").length;
+  const underAttack = myGarrisons.filter((o) => o.status === "UNDER_ATTACK").length;
+  const degraded = myGarrisons.filter((o) => o.status === "DEGRADED").length;
 
   const detail = (
     <>
       <DetailHeader title="NETWORK STATUS" />
       <DetailBody>
         <DetailRow label="ACTIVE NODES" value={`${data.activeNodes.toString().padStart(2, "0")} / ${data.totalNodes}`} />
-        <DetailRow label="FULL NODES" value={full.toString().padStart(2, "0")} />
+        <DetailRow label="SAFEHOUSES" value={full.toString().padStart(2, "0")} />
         <DetailRow label="TACTICAL" value={tactical.toString().padStart(2, "0")} />
         <DetailRow label="DEGRADED" value={degraded.toString().padStart(2, "0")} valueClass={degraded > 0 ? "text-white" : undefined} />
         <DetailRow label="UNDER FIRE" value={underAttack.toString().padStart(2, "0")} valueClass={underAttack > 0 ? "text-white blink" : undefined} />
@@ -49,7 +49,7 @@ export function StatsArea() {
     <HoverDetail detail={detail} align="left">
       <div className="pointer-events-auto hidden h-full items-stretch md:flex">
         <Stat label="ACTIVE NODES" value={data.activeNodes.toString().padStart(2, "0")} sub={`${data.totalNodes} TOTAL`} />
-        <Stat label="ELITE" value={data.eliteCount.toString().padStart(2, "0")} sub="FULL NODES" />
+        <Stat label="ELITE" value={data.eliteCount.toString().padStart(2, "0")} sub="SAFEHOUSES" />
         <Stat label="COMPUTE" value={`${data.compute}`} unit="TF" sub="VERIFIED" />
         <Stat label="SOL" value={data.sol.toString().padStart(4, "0")} sub="CYCLE" />
       </div>

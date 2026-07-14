@@ -1348,3 +1348,39 @@ Work Log:
 Stage Summary:
 - Spec now correctly defines: GarrisonType = "Safehouse" | "Tactical Safehouse" (2 values, "FULL" dropped).
 - The placed structure interface = Garrison (was Outpost). GarrisonType = its type. "Outpost" = top-level faction group only — has nothing to do with the placed structure.
+
+---
+Task ID: RENAME-1
+Agent: Z.ai Code (RENAME-1)
+Task: Mechanical rename — placed-structure type `Outpost` → `Garrison` across all remaining files (frontend components, map subsystem, API routes, legacy/dead code).
+
+Work Log:
+- Verified prior agents had already renamed: types.ts (Outpost→Garrison, OutpostType→GarrisonType, OutpostStatus→GarrisonStatus, OutpostBrief→GarrisonBrief, OutpostBriefPriority→GarrisonBriefPriority, Faction.outposts→Faction.garrisons, GameState.outposts→GameState.garrisons, ClientAction kinds "place-outpost"→"place-garrison", "upgrade-outpost"→"upgrade-garrison"), mini-services/game-engine/* (all 5), converters.ts (function defs renamed), format.ts (outpostGlyph→garrisonGlyph), stores/command.ts (selectedOutpostId→selectedGarrisonId, selectOutpost→selectGarrison).
+- BUG FIX: `src/lib/map/converters.ts:79` had `code: outpostUnitCode(op),` calling a function that no longer existed after the previous rename — fixed to `code: garrisonUnitCode(op),`. This was a runtime ReferenceError that would have thrown the first time `garrisonsToGeoJSON()` was called.
+- Edited 24 files total applying the EXACT mapping table:
+  • 13 frontend components: command-deck.tsx, right-panel.tsx, outpost-detail-card.tsx (component OutpostDetailCard→GarrisonDetailCard), left-panel.tsx, header/stats-area.tsx, header/stats-area.data.ts, header/threat-area.tsx, header/brand-area.tsx, header/hover-detail.tsx, header/standings-area.tsx, nav/nav-registry.ts, app/layout.tsx, status-bar.tsx.
+  • 7 map subsystem files: map-view.tsx (selectedOutpost→selectedGarrison), unit-info-panel.tsx (WireframeOutpost→WireframeGarrison, outpostUnitCode→garrisonUnitCode), layers/outposts.layer.ts (FULL REWRITE — outpostsLayer→garrisonsLayer, all layer IDs outpost-*→garrison-*, GAME_SOURCE_IDS.outposts→GAME_SOURCE_IDS.garrisons, source "outposts-src"→"garrisons-src", cachedOutposts→cachedGarrisons, match expression collapsed from "FULL",2,"SAFEHOUSE",3,1 to "Safehouse",2,1), sources/game-engine.source.ts, layer-host.tsx (all layer ID refs renamed), registry/layers.ts (import + registration), types.ts (comment), layers/territory.layer.ts (comment).
+  • 2 API routes: ai/outpost-briefing/route.ts (KEPT route path /api/ai/outpost-briefing unchanged, only internal code renamed), ai/briefing/route.ts.
+  • 2 legacy/dead-code files (must still compile): world-map.tsx (renamed outpostsRef→garrisonsRef, all outpost-* layer IDs→garrison-*, source "outposts"→"garrisons", UI string "DEPLOY OUTPOST"→"DEPLOY GARRISON"), lib/map/layers.ts (FULL REWRITE — all layer IDs renamed, all match expressions "FULL"→"Safehouse", filter "SAFEHOUSE"→"Safehouse", source "outposts"→"garrisons").
+- MapLibre layer/source IDs renamed (in MODULAR map system only): outpost-pulse→garrison-pulse, outpost-hitbox→garrison-hitbox, outpost-square→garrison-square, outpost-code→garrison-code, outpost-select→garrison-select, outpost-clusters→garrison-clusters, outpost-cluster-label→garrison-cluster-label, source "outposts-src"→"garrisons-src", GAME_SOURCE_IDS.outposts ("game:outposts")→GAME_SOURCE_IDS.garrisons ("game:garrisons").
+- UI strings renamed: "OUTPOST DEPLOYED"→"GARRISON DEPLOYED", "SELECT AN OUTPOST"→"SELECT A GARRISON", "SOURCE OUTPOST(S)"→"SOURCE GARRISON(S)", "OUTPOSTS DEPLOYED"→"GARRISONS DEPLOYED", "DEPLOY OUTPOST"→"DEPLOY GARRISON", "Deploy Outpost"→"Deploy Garrison", "FULL OUTPOST"/"FULL NODE"→"SAFEHOUSE", "TACTICAL OUTPOST"/"TACTICAL NODE"→"TACTICAL SAFEHOUSE", "FULL" (fleet label)→"SAFEHOUSE", "Place outposts"→"Place garrisons", "outposts" keyword→"garrisons" (layout.tsx metadata), "CLICK RIVAL OUTPOST TO COMMIT"→"CLICK RIVAL GARRISON TO COMMIT", "CLICK GLOBE TO DEPLOY OUTPOST"→"CLICK GLOBE TO DEPLOY GARRISON".
+- Action kinds renamed: `"place-outpost"`→`"place-garrison"`, `"upgrade-outpost"`→`"upgrade-garrison"` (in command-deck.tsx handleMapClick + right-panel.tsx + outpost-detail-card.tsx).
+- GarrisonType string values migrated: `"FULL"`→`"Safehouse"` (3 places in MapLibre match expressions, multiple places in component code), `"TACTICAL"`→`"Tactical Safehouse"`, `"SAFEHOUSE"`→`"Safehouse"`. MapLibre `["match", ["get", "type"], "FULL", 2, "SAFEHOUSE", 3, 1]` collapsed to `["match", ["get", "type"], "Safehouse", 2, 1]` (dropped redundant SAFEHOUSE branch since "Safehouse" IS the new name for what was "FULL").
+- Store field renames propagated to all consumers: `selectedOutpostId`→`selectedGarrisonId`, `selectOutpost`→`selectGarrison` (command-deck.tsx, right-panel.tsx, left-panel.tsx, sources/game-engine.source.ts).
+- Function renames propagated to all imports: `outpostsToGeoJSON`→`garrisonsToGeoJSON` (world-map.tsx, lib/map/layers.ts, sources/game-engine.source.ts), `outpostUnitCode`→`garrisonUnitCode` (unit-info-panel.tsx, converters.ts internal call).
+- Comment updates: "outpost selection"→"garrison selection" (types.ts), "OutpostDetailCard"→"GarrisonDetailCard" (hover-detail.tsx), "outpost hover"→"garrison hover" (layer-host.tsx), "Deselect the active outpost"→"Deselect the active garrison" (layer-host.tsx), "all outpost layers"→"all garrison layers" (layer-host.tsx), "per-outpost influence halos"→"per-garrison influence halos" (territory.layer.ts, lib/map/layers.ts), "operative's home outpost"→"operative's home garrison" (map-view.tsx), "outpost/compute"→"garrison/compute" (stats-area.data.ts).
+- What was NOT touched (per task rules): file names (outpost-detail-card.tsx, outposts.layer.ts, outpost-briefing/route.ts all kept), API route path /api/ai/outpost-briefing (kept), FACTION_OUTPOST_NUMBER / outpostNumber() / outpostNumberStr() (top-level concept, kept), "Outpost 33 FANG" style strings (kept), comments referencing "outpost number" (the 33/21/7 designation, kept), documentation files (PLATFORM-REPORT.md, BACKEND_INTEGRATION_SPEC.md, worklog.md — historical records).
+
+Verification:
+- `bun run lint` → 0 errors, 0 warnings. ✅
+- `tail dev.log` → most recent: `✓ Compiled in 202ms`, `GET / 200 in 522ms`. No runtime errors. The "Fast Refresh had to perform a full reload" message earlier is expected during a multi-file refactor (HMR gives up and reloads the page); after recovery, page renders OK with 200 status. ✅
+- Final sanity grep: all remaining `outpost` references in /src are in the explicitly-allowed categories (route path comment, FACTION_OUTPOST_NUMBER/outpostNumber/outpostNumberStr, filenames, "Outpost 33" style strings). ✅
+- Worklog written to /home/z/my-project/agent-ctx/RENAME-1-z-ai-code.md (detailed per-file edit log).
+
+Stage Summary:
+- The placed-structure type formerly called `Outpost` is now `Garrison` across the entire codebase (24 files edited, including dead code that must still compile).
+- The top-level "Outpost" concept (Outpost 33 FANG, Outpost 21 HAMMER, Outpost 7 RESOLUTE) is completely untouched.
+- The MODULAR map system's layer/source IDs are all renamed (outpost-*→garrison-*, game:outposts→game:garrisons, outposts-src→garrisons-src).
+- The legacy world-map.tsx + lib/map/layers.ts (dead code) have also been renamed for consistency, so the codebase has no stale `Outpost`/`outpost` references to the placed-structure concept.
+- The API route path `/api/ai/outpost-briefing` is intentionally preserved (only internal code renamed).
+- A pre-existing runtime ReferenceError in converters.ts:79 (calling the old `outpostUnitCode` name) was discovered and fixed.

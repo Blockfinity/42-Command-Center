@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Gameplay layer definitions — the runtime MapLibre sources + layers added
-// after map load (territories, halos, missions, pings, outposts, progress).
+// after map load (territories, halos, missions, pings, garrisons, progress).
 // Extracted from world-map.tsx for separation of concerns.
 //
 // These are pure data: layer specs + initial source factories. The component
@@ -9,9 +9,9 @@
 // ---------------------------------------------------------------------------
 
 import type maplibregl from "maplibre-gl";
-import type { FactionId, GameState } from "@/lib/types";
+import type { GameState } from "@/lib/types";
 import {
-  outpostsToGeoJSON,
+  garrisonsToGeoJSON,
   halosToGeoJSON,
   missionsToGeoJSON,
   territoriesToGeoJSON,
@@ -29,20 +29,20 @@ export function addGameplaySources(
   state: GameState,
   selectedId: string | null,
 ): void {
-  // Outposts — clustered GeoJSON source (scales to many points)
-  map.addSource("outposts", {
+  // Garrisons — clustered GeoJSON source (scales to many points)
+  map.addSource("garrisons", {
     type: "geojson",
-    data: outpostsToGeoJSON(state.outposts, state.operative.faction, selectedId) as any,
+    data: garrisonsToGeoJSON(state.garrisons, state.operative.faction, selectedId) as any,
     cluster: true,
     clusterRadius: 32,
     clusterMaxZoom: 5,
     promoteId: "id",
   });
 
-  // Territory halos (legacy per-outpost influence circles)
+  // Territory halos (legacy per-garrison influence circles)
   map.addSource("halos", {
     type: "geojson",
-    data: halosToGeoJSON(state.outposts) as any,
+    data: halosToGeoJSON(state.garrisons) as any,
   });
 
   // Territory control polygons (the "fight for territory" layer)
@@ -58,20 +58,20 @@ export function addGameplaySources(
   });
 
   // Mission vectors (aggressive + passive)
-  const mg = missionsToGeoJSON(state.missions, state.outposts);
+  const mg = missionsToGeoJSON(state.missions, state.garrisons);
   map.addSource("vectors-agg", { type: "geojson", data: mg.aggressive as any });
   map.addSource("vectors-pass", { type: "geojson", data: mg.passive as any });
 
   // Mission impact points (active aggressive mission targets — pulsing)
   map.addSource("vectors-agg-impact", {
     type: "geojson",
-    data: missionImpactsToGeoJSON(state.missions, state.outposts) as any,
+    data: missionImpactsToGeoJSON(state.missions, state.garrisons) as any,
   });
 
   // Mission progress heads
   map.addSource("progress-heads", {
     type: "geojson",
-    data: progressHeadsToGeoJSON(state.missions, state.outposts) as any,
+    data: progressHeadsToGeoJSON(state.missions, state.garrisons) as any,
   });
 }
 
@@ -134,7 +134,7 @@ export function addGameplayLayers(map: maplibregl.Map): void {
     /* Noto Sans not available — territory labels omitted */
   }
 
-  // --- Per-outpost influence halos: faint fill + dashed outline ---
+  // --- Per-garrison influence halos: faint fill + dashed outline ---
   map.addLayer({
     id: "halos-fill",
     type: "fill",
@@ -228,19 +228,19 @@ export function addGameplayLayers(map: maplibregl.Map): void {
     },
   });
 
-  // --- Outpost: soft halo glow (every outpost gets a halo) ---
+  // --- Garrison: soft halo glow (every garrison gets a halo) ---
   // Below the health ring; radius scales with level and zoom.
   map.addLayer({
-    id: "outpost-glow",
+    id: "garrison-glow",
     type: "circle",
-    source: "outposts",
+    source: "garrisons",
     filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-radius": [
         "interpolate", ["linear"], ["zoom"],
-        0, ["+", ["match", ["get", "type"], "FULL", 8, 6], ["*", ["get", "level"], 0.8]],
-        4, ["+", ["match", ["get", "type"], "FULL", 12, 9], ["*", ["get", "level"], 1.0]],
-        8, ["+", ["match", ["get", "type"], "FULL", 18, 13], ["*", ["get", "level"], 1.3]],
+        0, ["+", ["match", ["get", "type"], "Safehouse", 8, 6], ["*", ["get", "level"], 0.8]],
+        4, ["+", ["match", ["get", "type"], "Safehouse", 12, 9], ["*", ["get", "level"], 1.0]],
+        8, ["+", ["match", ["get", "type"], "Safehouse", 18, 13], ["*", ["get", "level"], 1.3]],
       ],
       "circle-color": "#fff",
       "circle-opacity": ["case", ["==", ["get", "isMine"], 1], 0.35, 0.15],
@@ -249,13 +249,13 @@ export function addGameplayLayers(map: maplibregl.Map): void {
     },
   });
 
-  // --- Outpost: SAFEHOUSE fortified double-ring aura ---
-  // Filtered to SAFEHOUSE outposts only — fill 0.06 + thick stroke = "fortified".
+  // --- Garrison: Safehouse fortified double-ring aura ---
+  // Filtered to Safehouse garrisons only — fill 0.06 + thick stroke = "fortified".
   map.addLayer({
-    id: "outpost-safehouse-aura",
+    id: "garrison-safehouse-aura",
     type: "circle",
-    source: "outposts",
-    filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "type"], "SAFEHOUSE"]],
+    source: "garrisons",
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "type"], "Safehouse"]],
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 12, 4, 17, 8, 24],
       "circle-color": "#fff",
@@ -266,13 +266,13 @@ export function addGameplayLayers(map: maplibregl.Map): void {
     },
   });
 
-  // --- Outpost: selection / under-attack pulse ring (animated) ---
-  // Filtered to selected OR under-attack outposts. Radius + opacity
+  // --- Garrison: selection / under-attack pulse ring (animated) ---
+  // Filtered to selected OR under-attack garrisons. Radius + opacity
   // animated via rAF setPaintProperty for a pulsing glow.
   map.addLayer({
-    id: "outpost-pulse",
+    id: "garrison-pulse",
     type: "circle",
-    source: "outposts",
+    source: "garrisons",
     filter: ["any", ["==", ["get", "selected"], 1], ["==", ["get", "underAttack"], 1]],
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 14, 4, 22, 8, 34],
@@ -283,18 +283,18 @@ export function addGameplayLayers(map: maplibregl.Map): void {
     },
   });
 
-  // --- Outpost: health ring (hollow circle, stroke-opacity = health%) ---
+  // --- Garrison: health ring (hollow circle, stroke-opacity = health%) ---
   // Only renders for unclustered points.
   map.addLayer({
-    id: "outpost-health-ring",
+    id: "garrison-health-ring",
     type: "circle",
-    source: "outposts",
+    source: "garrisons",
     filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"],
-        0, ["match", ["get", "type"], "FULL", 11, 8],
-        4, ["match", ["get", "type"], "FULL", 16, 11],
-        8, ["match", ["get", "type"], "FULL", 24, 16]],
+        0, ["match", ["get", "type"], "Safehouse", 11, 8],
+        4, ["match", ["get", "type"], "Safehouse", 16, 11],
+        8, ["match", ["get", "type"], "Safehouse", 24, 16]],
       "circle-color": "rgba(0,0,0,0)",
       "circle-stroke-color": "#fff",
       "circle-stroke-opacity": [
@@ -307,33 +307,33 @@ export function addGameplayLayers(map: maplibregl.Map): void {
     },
   });
 
-  // --- Outpost: faction shape (symbol layer with sprite icons) ---
+  // --- Garrison: faction shape (symbol layer with sprite icons) ---
   // The core mark — hex/diamond/square — rendered as a WebGL texture.
   map.addLayer({
-    id: "outpost-shape",
+    id: "garrison-shape",
     type: "symbol",
-    source: "outposts",
+    source: "garrisons",
     filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["match", ["get", "faction"], "FANG", "faction-FANG", "HAMMER", "faction-HAMMER", "faction-RESOLUTE"],
       "icon-size": ["interpolate", ["linear"], ["zoom"],
-        0, ["match", ["get", "type"], "FULL", 0.32, 0.22],
-        4, ["match", ["get", "type"], "FULL", 0.44, 0.3],
-        8, ["match", ["get", "type"], "FULL", 0.6, 0.42]],
+        0, ["match", ["get", "type"], "Safehouse", 0.32, 0.22],
+        4, ["match", ["get", "type"], "Safehouse", 0.44, 0.3],
+        8, ["match", ["get", "type"], "Safehouse", 0.6, 0.42]],
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
-      "symbol-sort-key": ["match", ["get", "type"], "FULL", 2, 1],
+      "symbol-sort-key": ["match", ["get", "type"], "Safehouse", 2, 1],
     },
     paint: {
       "icon-opacity": ["case", ["==", ["get", "offline"], 1], 0.3, 1],
     },
   });
 
-  // --- Outpost: cluster count label (for clustered points) ---
+  // --- Garrison: cluster count label (for clustered points) ---
   map.addLayer({
-    id: "outpost-clusters",
+    id: "garrison-clusters",
     type: "circle",
-    source: "outposts",
+    source: "garrisons",
     filter: ["has", "point_count"],
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 16, 8, 24],
@@ -344,9 +344,9 @@ export function addGameplayLayers(map: maplibregl.Map): void {
     },
   });
   map.addLayer({
-    id: "outpost-cluster-label",
+    id: "garrison-cluster-label",
     type: "symbol",
-    source: "outposts",
+    source: "garrisons",
     filter: ["has", "point_count"],
     layout: {
       "text-field": "{point_count}",

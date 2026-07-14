@@ -31,7 +31,7 @@ import { UnitInfoPanel } from "./unit-info-panel";
 import { cn } from "@/lib/utils";
 
 interface MapViewProps {
-  /** Initial camera center [lng, lat]. Computed by the parent from the operative's home outpost. */
+  /** Initial camera center [lng, lat]. Computed by the parent from the operative's home garrison. */
   initialCenter: [number, number];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -52,11 +52,11 @@ export function MapView({
   const [centerLat, setCenterLat] = React.useState(0);
   const [zoom, setZoom] = React.useState(1.6);
 
-  // Read state from the store for HUD readouts + the selected outpost (for
+  // Read state from the store for HUD readouts + the selected garrison (for
   // the UnitInfoPanel). Layer data flows through the source adapter.
   const state = useCommand((s) => s.state);
-  const selectedOutpost = React.useMemo(
-    () => state?.outposts.find((o) => o.id === selectedId) ?? null,
+  const selectedGarrison = React.useMemo(
+    () => state?.garrisons.find((o) => o.id === selectedId) ?? null,
     [state, selectedId],
   );
 
@@ -165,7 +165,7 @@ export function MapView({
       {/* ===== SurveilTrack-style chrome ===== */}
 
       {/* Unit info panel — floating left-center, shown whenever a unit is selected */}
-      <UnitInfoPanel outpost={selectedOutpost} visible={!!selectedOutpost} />
+      <UnitInfoPanel garrison={selectedGarrison} visible={!!selectedGarrison} />
 
       {/* Zoom controls — bottom-right, always visible (Google Earth-like) */}
       <div className="pointer-events-auto absolute bottom-8 right-4 z-20 flex flex-col gap-1">
@@ -214,7 +214,7 @@ export function MapView({
       {/* Placement hint */}
       {placementMode && (
         <div className="pointer-events-none absolute left-1/2 top-32 -translate-x-1/2 border border-white/30 bg-black/70 px-3 py-1.5 font-mono text-[10px] tracking-[0.2em] text-white/90 backdrop-blur">
-          CLICK GLOBE TO DEPLOY OUTPOST · ESC TO CANCEL
+          CLICK GLOBE TO DEPLOY GARRISON · ESC TO CANCEL
         </div>
       )}
     </div>

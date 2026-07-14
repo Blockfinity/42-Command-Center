@@ -43,7 +43,7 @@ export function ThreatArea() {
 
   const detail = THREAT_DETAIL[data.level];
 
-  const underAttack = state.outposts.filter((o) => o.status === "UNDER_ATTACK").length;
+  const underAttack = state.garrisons.filter((o) => o.status === "UNDER_ATTACK").length;
   const activeHostile = state.missions.filter(
     (m) => m.status === "ACTIVE" && m.faction !== state.operative.faction,
   ).length;

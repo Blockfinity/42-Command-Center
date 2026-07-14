@@ -7,7 +7,7 @@
 import {
   type GameState,
   type GameEvent,
-  type Outpost,
+  type Garrison,
   type Mission,
   type FactionId,
   type MissionType,
@@ -37,35 +37,35 @@ export function pushEvent(state: GameState, ev: Omit<GameEvent, "id" | "timestam
 
 export function recalcFactions(state: GameState) {
   for (const f of FACTIONS) {
-    const mine = state.outposts.filter((o) => o.faction === f);
+    const mine = state.garrisons.filter((o) => o.faction === f);
     const online = mine.filter((o) => o.status !== "OFFLINE");
     const totalCompute = online.reduce((a, o) => a + o.compute * (o.health / o.maxHealth), 0);
     const avgHealth = mine.length ? mine.reduce((a, o) => a + o.health, 0) / mine.length : 0;
     state.factions[f].compute = Math.round(totalCompute);
-    state.factions[f].outposts = mine.length;
+    state.factions[f].garrisons = mine.length;
     // Territory count is now driven by the territory-control layer, not by
-    // raw FULL-outpost count (so capturing a region actually moves the needle).
+    // raw Safehouse-garrison count (so capturing a region actually moves the needle).
     state.factions[f].territories = state.territories.filter((t) => t.controller === f).length;
     state.factions[f].strength = clamp(
       Math.round(avgHealth * 0.5 + (totalCompute / 20) + mine.length * 3)
     );
     state.factions[f].threat = clamp(
-      mine.filter((o) => o.type === "FULL").length * 9 +
+      mine.filter((o) => o.type === "Safehouse").length * 9 +
       state.missions.filter((m) => m.faction === f && m.status === "ACTIVE" && (m.type === "DRONE_STRIKE" || m.type === "CYBER_ATTACK")).length * 12
     );
   }
 }
 
 /**
- * Recompute territory control from outpost influence.
+ * Recompute territory control from garrison influence.
  *
  * Influence rules:
- *   - Only non-OFFLINE outposts contribute.
+ *   - Only non-OFFLINE garrisons contribute.
  *   - Base influence = level * (health / maxHealth) * proximityWeight.
  *   - proximityWeight = 1.0 if angular distance to centroid < 12°, else
  *     decays linearly to 0 at 30°.
- *   - FULL outposts get a 2× multiplier (offensive territorial anchor);
- *     SAFEHOUSE outposts get 0.5× (defensive — not built for territory).
+ *   - Safehouse garrisons get 2× multiplier (offensive territorial anchor);
+ *     Tactical Safehouse garrisons get default 1× (edge nodes, less territory projection).
  *
  * Control rules:
  *   - The leading faction wins only if its influence > 1.4 × the runner-up's
@@ -79,14 +79,14 @@ export function recalcTerritories(state: GameState) {
     const influence: Record<FactionId, number> = { FANG: 0, HAMMER: 0, RESOLUTE: 0 };
     const [tLng, tLat] = t.center;
 
-    for (const o of state.outposts) {
+    for (const o of state.garrisons) {
       if (o.status === "OFFLINE") continue;
       const dist = angularDist(o.lat, o.lng, tLat, tLng);
       const weight = dist < 12 ? 1.0 : Math.max(0, 1 - dist / 30);
       if (weight <= 0) continue;
       let mult = 1;
-      if (o.type === "FULL") mult = 2;
-      else if (o.type === "SAFEHOUSE") mult = 0.5;
+      if (o.type === "Safehouse") mult = 2;
+      // Tactical Safehouse: default mult = 1 (not built for territory projection)
       influence[o.faction] += o.level * (o.health / o.maxHealth) * weight * mult;
     }
 
@@ -132,7 +132,7 @@ export function recalcThreat(state: GameState) {
   const active = state.missions.filter((m) => m.status === "ACTIVE");
   const strikes = active.filter((m) => m.type === "DRONE_STRIKE").length;
   const cyber = active.filter((m) => m.type === "CYBER_ATTACK").length;
-  const underAttack = state.outposts.filter((o) => o.status === "UNDER_ATTACK").length;
+  const underAttack = state.garrisons.filter((o) => o.status === "UNDER_ATTACK").length;
   const score = strikes * 3 + cyber * 2 + underAttack * 4;
   if (score === 0) state.threatLevel = "GREEN";
   else if (score <= 4) state.threatLevel = "AMBER";
@@ -147,9 +147,9 @@ export function factionAiTurn(state: GameState) {
   for (const f of FACTIONS) {
     if (f === state.operative.faction) continue; // player faction acts via player
     if (Math.random() > 0.12) continue; // gentler cadence
-    const mine = state.outposts.filter((o) => o.faction === f && o.status !== "OFFLINE");
+    const mine = state.garrisons.filter((o) => o.faction === f && o.status !== "OFFLINE");
     if (!mine.length) continue;
-    const rivals = state.outposts.filter((o) => o.faction !== f && o.status !== "OFFLINE");
+    const rivals = state.garrisons.filter((o) => o.faction !== f && o.status !== "OFFLINE");
     if (!rivals.length) continue;
     // prefer striking the strongest rival for drama
     const tgt = pick(rivals);
@@ -165,8 +165,8 @@ export function factionAiTurn(state: GameState) {
 
 export function spawnMission(state: GameState, type: MissionType, sourceId: string, targetId: string, faction: FactionId) {
   const meta = MISSION_META[type];
-  const src = state.outposts.find((o) => o.id === sourceId);
-  const tgt = state.outposts.find((o) => o.id === targetId);
+  const src = state.garrisons.find((o) => o.id === sourceId);
+  const tgt = state.garrisons.find((o) => o.id === targetId);
   if (!src) return;
   const mission: Mission = {
     id: uid("ms"),
@@ -212,8 +212,8 @@ export function progressMissions(state: GameState) {
 }
 
 export function resolveMission(state: GameState, m: Mission) {
-  const src = state.outposts.find((o) => o.id === m.sourceId);
-  const tgt = state.outposts.find((o) => o.id === m.targetId);
+  const src = state.garrisons.find((o) => o.id === m.sourceId);
+  const tgt = state.garrisons.find((o) => o.id === m.targetId);
   m.status = "COMPLETE";
   switch (m.type) {
     case "DRONE_STRIKE": {
@@ -288,7 +288,7 @@ export function resolveMission(state: GameState, m: Mission) {
         tgt.level += 1;
         tgt.maxHealth += 30;
         tgt.health = Math.min(tgt.maxHealth, tgt.health + 25);
-        tgt.compute += tgt.type === "FULL" ? 12 : 4;
+        tgt.compute += tgt.type === "Safehouse" ? 12 : 4;
         tgt.status = "ONLINE";
         pushEvent(state, {
           type: "BUILD",
@@ -320,9 +320,9 @@ export function resolveMission(state: GameState, m: Mission) {
 }
 
 export function accrueUptime(state: GameState) {
-  for (const o of state.outposts) {
+  for (const o of state.garrisons) {
     if (o.status === "OFFLINE") {
-      // offline outposts slowly auto-reboot so the theatre never fully dies
+      // offline garrisons slowly auto-reboot so the theatre never fully dies
       if (Math.random() < 0.04) {
         o.health = Math.max(10, o.maxHealth * 0.25);
         o.status = "DEGRADED";
@@ -337,11 +337,11 @@ export function accrueUptime(state: GameState) {
     }
     const sec = TICK_MS / 1000;
     o.uptime += sec * 1000;
-    const rate = o.type === "FULL" ? 0.8 : 0.3;
+    const rate = o.type === "Safehouse" ? 0.8 : 0.3;
     o.buildPoints += rate * sec * (o.health / o.maxHealth);
     // self-repair when not under attack (faster, so the theatre stays alive)
     if (o.status !== "UNDER_ATTACK" && o.health < o.maxHealth) {
-      o.health = Math.min(o.maxHealth, o.health + (o.type === "FULL" ? 1.1 : 0.6));
+      o.health = Math.min(o.maxHealth, o.health + (o.type === "Safehouse" ? 1.1 : 0.6));
     }
     // recover from degraded
     if (o.status === "DEGRADED" && o.health > 60) o.status = "ONLINE";
@@ -365,7 +365,7 @@ export function ambientEvents(state: GameState) {
 /**
  * Synthesize a planet-scale stream of activity pings — strikes, builds,
  * deployments, scans, breaches, and the ever-present TRAFFIC background hum.
- * 60% spawn near an existing outpost (jitter ±3°), 40% over random
+ * 60% spawn near an existing garrison (jitter ±3°), 40% over random
  * land-ish latitudes. Each ping lives 5s; the array is capped at 80 (newest).
  */
 export function spawnActivityPings(state: GameState) {
@@ -374,8 +374,8 @@ export function spawnActivityPings(state: GameState) {
   for (let i = 0; i < n; i++) {
     let lat: number;
     let lng: number;
-    if (Math.random() < 0.6 && state.outposts.length > 0) {
-      const o = pick(state.outposts);
+    if (Math.random() < 0.6 && state.garrisons.length > 0) {
+      const o = pick(state.garrisons);
       lat = o.lat + (Math.random() - 0.5) * 6; // ±3°
       lng = o.lng + (Math.random() - 0.5) * 6;
     } else {

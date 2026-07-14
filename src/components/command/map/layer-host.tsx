@@ -91,7 +91,7 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
           if (intr.placementMode) {
             intr.onMapClick(e.lngLat.lat, e.lngLat.lng);
           } else {
-            // Deselect the active outpost (if any).
+            // Deselect the active garrison (if any).
             intr.onSelect(null);
             // Globe reset (ease back to home) — only at low zoom. At street
             // zoom, clicking empty ground just deselects; resetting the camera
@@ -109,7 +109,7 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
       //    mouseenter/mouseleave on all render layers. We query the map's
       //    style to find which layer IDs belong to which MapLayerSpec.
       //    For simplicity, we register a single move handler that checks
-      //    all outpost layers for cursor management.
+      //    all garrison layers for cursor management.
       const onMove = () => {
         const intr = interactionRef.current;
         map.getCanvas().style.cursor = intr.placementMode ? "crosshair" : "grab";
@@ -122,13 +122,13 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         const intr = interactionRef.current;
         map.getCanvas().style.cursor = intr.placementMode ? "crosshair" : "grab";
       };
-      // Outpost hover → pointer (all outpost marker layers)
+      // Garrison hover → pointer (all garrison marker layers)
       [
-        "outpost-square",
-        "outpost-code",
-        "outpost-select",
-        "outpost-hitbox",
-        "outpost-clusters",
+        "garrison-square",
+        "garrison-code",
+        "garrison-select",
+        "garrison-hitbox",
+        "garrison-clusters",
       ].forEach((layerId) => {
         if (map.getLayer(layerId)) {
           map.on("mouseenter", layerId, setPointer);
@@ -154,7 +154,7 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         if (rafId !== null) cancelAnimationFrame(rafId);
         map.off("click", onClick);
         map.off("move", onMove);
-        ["outpost-square", "outpost-code", "outpost-select", "outpost-hitbox", "outpost-clusters"].forEach((layerId) => {
+        ["garrison-square", "garrison-code", "garrison-select", "garrison-hitbox", "garrison-clusters"].forEach((layerId) => {
           if (map.getLayer(layerId)) {
             map.off("mouseenter", layerId, setPointer);
             map.off("mouseleave", layerId, setGrab);

@@ -13,7 +13,7 @@
 //   (c) batch action ingress (debounce + coalesce client actions at an edge
 //       gateway before they ever touch authoritative state).
 // This in-memory single-process demo validates the visualization layer —
-// the broadcast is small enough at ~16 outposts + ~80 pings + 12 territories
+// the broadcast is small enough at ~16 garrisons + ~80 pings + 12 territories
 // that we can afford the simplicity of a full-state snapshot every 2s.
 // ===========================================================================
 //

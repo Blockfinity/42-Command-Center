@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
 // Client action handlers — process player commands (launch mission, place
-// outpost, upgrade, request briefing). Mutates GameState + emits result.
+// garrison, upgrade, request briefing). Mutates GameState + emits result.
 // Extracted from index.ts for testability.
 // ---------------------------------------------------------------------------
 
 import {
   type GameState,
-  type Outpost,
+  type Garrison,
   type ClientAction,
   MISSION_META,
 } from "../../../src/lib/types";
@@ -19,13 +19,13 @@ export function handleAction(state: GameState, action: ClientAction): ActionResu
   try {
     switch (action.kind) {
       case "launch-mission": {
-        const src = state.outposts.find((o) => o.id === action.sourceId);
-        const tgt = state.outposts.find((o) => o.id === action.targetId);
+        const src = state.garrisons.find((o) => o.id === action.sourceId);
+        const tgt = state.garrisons.find((o) => o.id === action.targetId);
         if (!src || !tgt) {
           return { ok: false, error: "Invalid source or target." };
         }
         if (src.faction === tgt.faction && action.missionType !== "BUILD" && action.missionType !== "DEFEND") {
-          return { ok: false, error: "Cannot strike a friendly outpost." };
+          return { ok: false, error: "Cannot strike a friendly garrison." };
         }
         if (action.missionType === "BUILD") {
           const cost = 40 + src.level * 20;
@@ -38,18 +38,16 @@ export function handleAction(state: GameState, action: ClientAction): ActionResu
         spawnMission(state, action.missionType, src.id, targetId, src.faction);
         return { ok: true };
       }
-      case "place-outpost": {
-        // Per-type deploy spec. FULL = heavy anchor, TACTICAL = light striker,
-        // SAFEHOUSE = fortified bolt-hole (low compute, durable, defensive).
+      case "place-garrison": {
+        // Per-type deploy spec. Safehouse = full node daemon (heavy),
+        // Tactical Safehouse = edge plugin (light striker).
         const spec =
-          action.type === "FULL"
+          action.type === "Safehouse"
             ? { health: 80, maxHealth: 100, compute: 30, buildPoints: 25, level: 1 }
-            : action.type === "SAFEHOUSE"
-            ? { health: 70, maxHealth: 70, compute: 6, buildPoints: 5, level: 1 }
-            : { health: 45, maxHealth: 55, compute: 9, buildPoints: 8, level: 1 }; // TACTICAL
-        const op: Outpost = {
+            : { health: 45, maxHealth: 55, compute: 9, buildPoints: 8, level: 1 }; // Tactical Safehouse
+        const op: Garrison = {
           id: uid("op"),
-          name: action.name || `${state.operative.faction} NODE ${state.outposts.length + 1}`,
+          name: action.name || `${state.operative.faction} NODE ${state.garrisons.length + 1}`,
           type: action.type,
           faction: state.operative.faction,
           lat: action.lat,
@@ -63,11 +61,11 @@ export function handleAction(state: GameState, action: ClientAction): ActionResu
           status: "ONLINE",
           establishedAt: now(),
         };
-        state.outposts.push(op);
+        state.garrisons.push(op);
         const deployMsg =
-          action.type === "SAFEHOUSE"
+          action.type === "Safehouse"
             ? `Safehouse ${op.name} entrenched at ${op.lat.toFixed(2)}, ${op.lng.toFixed(2)}.`
-            : `${op.type === "FULL" ? "Outpost" : "Tactical outpost"} ${op.name} deployed at ${op.lat.toFixed(2)}, ${op.lng.toFixed(2)}.`;
+            : `Tactical Safehouse ${op.name} deployed at ${op.lat.toFixed(2)}, ${op.lng.toFixed(2)}.`;
         pushEvent(state, {
           type: "DEPLOY",
           message: deployMsg,
@@ -77,10 +75,10 @@ export function handleAction(state: GameState, action: ClientAction): ActionResu
         recalcFactions(state);
         return { ok: true };
       }
-      case "upgrade-outpost": {
-        const o = state.outposts.find((x) => x.id === action.id);
+      case "upgrade-garrison": {
+        const o = state.garrisons.find((x) => x.id === action.id);
         if (!o) {
-          return { ok: false, error: "Outpost not found." };
+          return { ok: false, error: "Garrison not found." };
         }
         const cost = 50 + o.level * 25;
         if (o.buildPoints < cost) {
@@ -90,7 +88,7 @@ export function handleAction(state: GameState, action: ClientAction): ActionResu
         o.level += 1;
         o.maxHealth += 25;
         o.health = Math.min(o.maxHealth, o.health + 20);
-        o.compute += o.type === "FULL" ? 10 : 3;
+        o.compute += o.type === "Safehouse" ? 10 : 3;
         pushEvent(state, {
           type: "UPGRADE",
           message: `${o.name} upgraded to level ${o.level}.`,

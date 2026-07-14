@@ -6,9 +6,9 @@ export type FactionId = "FANG" | "HAMMER" | "RESOLUTE";
 
 export const FACTIONS: FactionId[] = ["FANG", "HAMMER", "RESOLUTE"];
 
-export type OutpostType = "FULL" | "TACTICAL" | "SAFEHOUSE";
+export type GarrisonType = "Safehouse" | "Tactical Safehouse";
 
-export type OutpostStatus = "ONLINE" | "DEGRADED" | "OFFLINE" | "UNDER_ATTACK";
+export type GarrisonStatus = "ONLINE" | "DEGRADED" | "OFFLINE" | "UNDER_ATTACK";
 
 export type MissionType =
   | "DRONE_STRIKE"
@@ -22,10 +22,10 @@ export type MissionStatus = "QUEUED" | "ACTIVE" | "COMPLETE" | "FAILED";
 
 export type EventSeverity = "INFO" | "WARN" | "CRITICAL" | "SUCCESS";
 
-export interface Outpost {
+export interface Garrison {
   id: string;
   name: string;
-  type: OutpostType;
+  type: GarrisonType;
   faction: FactionId;
   lat: number;
   lng: number;
@@ -35,7 +35,7 @@ export interface Outpost {
   compute: number; // TFLOPS contributed to faction
   uptime: number; // seconds
   buildPoints: number; // accrued from uptime, spent on upgrades
-  status: OutpostStatus;
+  status: GarrisonStatus;
   establishedAt: number; // epoch ms
 }
 
@@ -46,7 +46,7 @@ export interface Faction {
   strength: number; // 0-100 aggregate
   compute: number; // total TFLOPS
   territories: number; // count of controlled regions
-  outposts: number;
+  garrisons: number;
   threat: number; // 0-100 perceived threat to others
 }
 
@@ -54,8 +54,8 @@ export interface Mission {
   id: string;
   type: MissionType;
   status: MissionStatus;
-  sourceId: string; // outpost id
-  targetId: string; // outpost id (or self for BUILD/DEFEND)
+  sourceId: string; // garrison id
+  targetId: string; // garrison id (or self for BUILD/DEFEND)
   faction: FactionId;
   progress: number; // 0-100
   eta: number; // seconds remaining
@@ -84,8 +84,8 @@ export interface Operative {
 
 // ===== Territory system =====
 // The globe is partitioned into named geographic regions. Factions fight for
-// control of these regions by holding the strongest outposts within them.
-// Control is recomputed every tick from aggregate outpost influence (level +
+// control of these regions by holding the strongest garrisons within them.
+// Control is recomputed every tick from aggregate garrison influence (level +
 // health + proximity to the territory centroid). When the leading faction
 // changes, an event is pushed and the region's fill flips on the globe.
 export interface Territory {
@@ -131,24 +131,24 @@ export interface Recommendation {
 }
 
 /**
- * Per-outpost "quick brief" — a short, AI-generated situational assessment
- * for a single outpost (own = unit readiness; rival = intel snapshot).
- * Triggered from the OutpostDetailCard "REQUEST PRIORITY BRIEFING" action.
+ * Per-garrison "quick brief" — a short, AI-generated situational assessment
+ * for a single garrison (own = unit readiness; rival = intel snapshot).
+ * Triggered from the GarrisonDetailCard "REQUEST PRIORITY BRIEFING" action.
  */
-export type OutpostBriefPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type GarrisonBriefPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
-export interface OutpostBrief {
-  /** 1–2 sentence situational assessment of this specific outpost. */
+export interface GarrisonBrief {
+  /** 1–2 sentence situational assessment of this specific garrison. */
   assessment: string;
   /** 1 sentence recommended action (offensive for rivals, defensive/build for own). */
   recommendation: string;
   /** Priority band — drives the badge color. */
-  priority: OutpostBriefPriority;
+  priority: GarrisonBriefPriority;
   /** 0–100 model confidence. */
   confidence: number;
   /** Estimated VOTC value at stake (compute/territory denominated in network currency). */
   votcAtStake: number;
-  /** Faction token denomination this outpost accrues/spends (FANG | HAMMER | RESOLUTE). */
+  /** Faction token denomination this garrison accrues/spends (FANG | HAMMER | RESOLUTE). */
   token: FactionId;
   generatedAt: number;
 }
@@ -176,7 +176,7 @@ export interface GameState {
   sol: number; // simulated "day" counter
   clock: number; // epoch ms
   factions: Record<FactionId, Faction>;
-  outposts: Outpost[];
+  garrisons: Garrison[];
   missions: Mission[];
   events: GameEvent[];
   threatLevel: ThreatLevel;
@@ -195,8 +195,8 @@ export interface GameState {
 // ===== Client → Server socket actions =====
 export type ClientAction =
   | { kind: "launch-mission"; missionType: MissionType; sourceId: string; targetId: string }
-  | { kind: "place-outpost"; type: OutpostType; lat: number; lng: number; name?: string }
-  | { kind: "upgrade-outpost"; id: string }
+  | { kind: "place-garrison"; type: GarrisonType; lat: number; lng: number; name?: string }
+  | { kind: "upgrade-garrison"; id: string }
   | { kind: "request-briefing" };
 
 // ===== Helpers =====
@@ -209,7 +209,7 @@ export const MISSION_META: Record<
     verb: "Strike",
     duration: 14,
     cost: 40,
-    desc: "Kinetic drone swarm assault. Damages target outpost, reduces health and uptime.",
+    desc: "Kinetic drone swarm assault. Damages target garrison, reduces health and uptime.",
   },
   CYBER_ATTACK: {
     label: "CYBER ATTACK",
@@ -237,14 +237,14 @@ export const MISSION_META: Record<
     verb: "Construct",
     duration: 16,
     cost: 0,
-    desc: "Reinforce an outpost. Costs build points, raises level and max health.",
+    desc: "Reinforce a garrison. Costs build points, raises level and max health.",
   },
   DEFEND: {
     label: "DEFEND",
     verb: "Fortify",
     duration: 12,
     cost: 0,
-    desc: "Raise shields on an outpost. Temporarily blocks incoming strikes.",
+    desc: "Raise shields on a garrison. Temporarily blocks incoming strikes.",
   },
 };
 

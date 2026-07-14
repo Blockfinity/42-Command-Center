@@ -6,7 +6,7 @@
 
 import type { GeoJSON } from "geojson";
 import type {
-  Outpost,
+  Garrison,
   FactionId,
   Mission,
   Territory,
@@ -20,7 +20,7 @@ export { FACTION_ICON };
 
 // ---- Alphanumeric unit codes (SurveilTrack-style: FNG-3300-NYC) ----
 // Format: {faction 3-letter}-{4-digit}-{3-letter region}. Deterministic per
-// outpost id so the code is stable across reconnects/reloads.
+// garrison id so the code is stable across reconnects/reloads.
 const FACTION_CODE: Record<FactionId, string> = {
   FANG: "FNG",
   HAMMER: "HMR",
@@ -47,15 +47,15 @@ function hash4(s: string): number {
 }
 
 /** Build the SurveilTrack-style unit code, e.g. "FNG-3300-NYC". */
-export function outpostUnitCode(op: Outpost): string {
+export function garrisonUnitCode(op: Garrison): string {
   return `${FACTION_CODE[op.faction]}-${hash4(op.id)}-${regionCode(op.lat, op.lng)}`;
 }
 
-/** Outposts → GeoJSON points with rich properties for data-driven styling. */
-export function outpostsToGeoJSON(outposts: Outpost[], operativeFaction: FactionId, selectedId: string | null): GeoJSON.FeatureCollection {
+/** Garrisons → GeoJSON points with rich properties for data-driven styling. */
+export function garrisonsToGeoJSON(garrisons: Garrison[], operativeFaction: FactionId, selectedId: string | null): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: outposts.map((op) => {
+    features: garrisons.map((op) => {
       const healthPct = op.maxHealth > 0 ? Math.max(0, Math.min(1, op.health / op.maxHealth)) : 0;
       const computePct = Math.max(0, Math.min(1, op.compute / 120)); // ~120 TFLOPS = 100%
       const uptimeHr = Math.floor(op.uptime / 3600);
@@ -76,7 +76,7 @@ export function outpostsToGeoJSON(outposts: Outpost[], operativeFaction: Faction
           underAttack: op.status === "UNDER_ATTACK" ? 1 : 0,
           offline: op.status === "OFFLINE" ? 1 : 0,
           icon: FACTION_ICON[op.faction],
-          code: outpostUnitCode(op),
+          code: garrisonUnitCode(op),
         },
         geometry: { type: "Point", coordinates: [op.lng, op.lat] },
       };
@@ -84,12 +84,12 @@ export function outpostsToGeoJSON(outposts: Outpost[], operativeFaction: Faction
   };
 }
 
-/** Territory halos → GeoJSON polygons (FULL outposts only). */
-export function halosToGeoJSON(outposts: Outpost[]): GeoJSON.FeatureCollection {
+/** Territory halos → GeoJSON polygons (Safehouse garrisons only). */
+export function halosToGeoJSON(garrisons: Garrison[]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: outposts
-      .filter((o) => o.type === "FULL" && o.status !== "OFFLINE")
+    features: garrisons
+      .filter((o) => o.type === "Safehouse" && o.status !== "OFFLINE")
       .map((o) => ({
         type: "Feature" as const,
         properties: {
@@ -103,7 +103,7 @@ export function halosToGeoJSON(outposts: Outpost[]): GeoJSON.FeatureCollection {
 }
 
 /** Mission vectors → great-circle arcs, split into aggressive / passive. */
-export function missionsToGeoJSON(missions: Mission[], outposts: Outpost[]): {
+export function missionsToGeoJSON(missions: Mission[], garrisons: Garrison[]): {
   aggressive: GeoJSON.FeatureCollection;
   passive: GeoJSON.FeatureCollection;
 } {
@@ -111,8 +111,8 @@ export function missionsToGeoJSON(missions: Mission[], outposts: Outpost[]): {
   const aggressive: GeoJSON.Feature[] = [];
   const passive: GeoJSON.Feature[] = [];
   for (const m of active) {
-    const src = outposts.find((o) => o.id === m.sourceId);
-    const tgt = outposts.find((o) => o.id === m.targetId);
+    const src = garrisons.find((o) => o.id === m.sourceId);
+    const tgt = garrisons.find((o) => o.id === m.targetId);
     if (!src || !tgt) continue;
     const arc = greatCircle([src.lng, src.lat], [tgt.lng, tgt.lat]);
     const isAgg = m.type === "DRONE_STRIKE" || m.type === "CYBER_ATTACK";
@@ -130,13 +130,13 @@ export function missionsToGeoJSON(missions: Mission[], outposts: Outpost[]): {
 }
 
 /** Active-mission progress heads → points sampled along great-circle arcs. */
-export function progressHeadsToGeoJSON(missions: Mission[], outposts: Outpost[]): GeoJSON.FeatureCollection {
+export function progressHeadsToGeoJSON(missions: Mission[], garrisons: Garrison[]): GeoJSON.FeatureCollection {
   const active = missions.filter((m) => m.status === "ACTIVE");
   return {
     type: "FeatureCollection",
     features: active.map((m) => {
-      const src = outposts.find((o) => o.id === m.sourceId);
-      const tgt = outposts.find((o) => o.id === m.targetId);
+      const src = garrisons.find((o) => o.id === m.sourceId);
+      const tgt = garrisons.find((o) => o.id === m.targetId);
       if (!src || !tgt) return null;
       const t = Math.max(0, Math.min(1, m.progress / 100));
       const pos = greatCirclePoint([src.lng, src.lat], [tgt.lng, tgt.lat], t);
@@ -215,12 +215,12 @@ export function pingsToGeoJSON(
  * ACTIVE strike/cyber-attack mission. Rendered as a pulsing circle so the
  * user can see where blows are about to land.
  */
-export function missionImpactsToGeoJSON(missions: Mission[], outposts: Outpost[]): GeoJSON.FeatureCollection {
+export function missionImpactsToGeoJSON(missions: Mission[], garrisons: Garrison[]): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const m of missions) {
     if (m.status !== "ACTIVE") continue;
     if (m.type !== "DRONE_STRIKE" && m.type !== "CYBER_ATTACK") continue;
-    const tgt = outposts.find((o) => o.id === m.targetId);
+    const tgt = garrisons.find((o) => o.id === m.targetId);
     if (!tgt) continue;
     features.push({
       type: "Feature" as const,

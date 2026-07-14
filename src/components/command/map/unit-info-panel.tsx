@@ -3,34 +3,34 @@
 // ---------------------------------------------------------------------------
 // UnitInfoPanel — SurveilTrack-style ground-view unit detail card.
 //
-// Shown when an outpost is selected AND the camera is zoomed into city/street
+// Shown when a garrison is selected AND the camera is zoomed into city/street
 // level (zoom ≥ 12). Renders a floating black panel with:
-//   • A wireframe outpost-tower illustration (white strokes on black)
+//   • A wireframe garrison-tower illustration (white strokes on black)
 //   • Status dot + alphanumeric unit code (e.g. "FNG-3300-NYC")
 //   • Power / Session / Signal telemetry rows
 //   • PERFORMANCE / HEALTH tabs with a live progress bar
 //
-// Complements (does not replace) the existing OutpostDetailCard — that card is
+// Complements (does not replace) the existing GarrisonDetailCard — that card is
 // the full tactical action console; this is the cinematic ground-view readout
 // that matches the SurveilTrack reference aesthetic.
 // ---------------------------------------------------------------------------
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Outpost } from "@/lib/types";
-import { outpostUnitCode } from "@/lib/map/converters";
+import type { Garrison } from "@/lib/types";
+import { garrisonUnitCode } from "@/lib/map/converters";
 import { fmtUptime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface UnitInfoPanelProps {
-  outpost: Outpost | null;
+  garrison: Garrison | null;
   visible: boolean;
 }
 
 type Tab = "PERFORMANCE" | "HEALTH";
 
 /** Status → dot color + label, matching the SurveilTrack status vocabulary. */
-function statusMeta(op: Outpost): { color: string; label: string } {
+function statusMeta(op: Garrison): { color: string; label: string } {
   switch (op.status) {
     case "ONLINE":
       return { color: "#22c55e", label: "ACTIVE" };
@@ -52,8 +52,8 @@ function signalMeta(healthPct: number): { color: string; label: string } {
   return { color: "#ef4444", label: "WEAK" };
 }
 
-/** Wireframe outpost-tower illustration — pure SVG, monochrome white on black. */
-function WireframeOutpost() {
+/** Wireframe garrison-tower illustration — pure SVG, monochrome white on black. */
+function WireframeGarrison() {
   return (
     <svg viewBox="0 0 120 96" className="h-24 w-full" fill="none" stroke="#fff" strokeWidth="1">
       {/* Signal emission arcs (top) */}
@@ -91,17 +91,17 @@ function WireframeOutpost() {
   );
 }
 
-export function UnitInfoPanel({ outpost, visible }: UnitInfoPanelProps) {
+export function UnitInfoPanel({ garrison, visible }: UnitInfoPanelProps) {
   const [tab, setTab] = React.useState<Tab>("PERFORMANCE");
 
   // Live "preparing details" progress — animates toward a target derived from
-  // the outpost's compute, giving the panel a living, telemetry-stream feel.
-  const targetPct = outpost
-    ? Math.round(Math.max(5, Math.min(99, (outpost.compute / 120) * 100)))
+  // the garrison's compute, giving the panel a living, telemetry-stream feel.
+  const targetPct = garrison
+    ? Math.round(Math.max(5, Math.min(99, (garrison.compute / 120) * 100)))
     : 0;
   const [progress, setProgress] = React.useState(0);
   React.useEffect(() => {
-    if (!outpost) return;
+    if (!garrison) return;
     setProgress(0);
     let raf = 0;
     const start = performance.now();
@@ -115,15 +115,15 @@ export function UnitInfoPanel({ outpost, visible }: UnitInfoPanelProps) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [outpost, targetPct]);
+  }, [garrison, targetPct]);
 
-  const show = visible && outpost;
+  const show = visible && garrison;
 
   return (
     <AnimatePresence>
-      {show && outpost && (
+      {show && garrison && (
         <motion.div
-          key={outpost.id}
+          key={garrison.id}
           initial={{ opacity: 0, x: 24, y: 8 }}
           animate={{ opacity: 1, x: 0, y: 0 }}
           exit={{ opacity: 0, x: 24, y: 8 }}
@@ -140,23 +140,23 @@ export function UnitInfoPanel({ outpost, visible }: UnitInfoPanelProps) {
             <span
               className="inline-block h-2 w-2 rounded-full"
               style={{
-                backgroundColor: statusMeta(outpost).color,
-                boxShadow: `0 0 6px ${statusMeta(outpost).color}`,
+                backgroundColor: statusMeta(garrison).color,
+                boxShadow: `0 0 6px ${statusMeta(garrison).color}`,
               }}
             />
             <span className="font-mono text-[9px] tracking-[0.18em] text-white/80">
-              {statusMeta(outpost).label}
+              {statusMeta(garrison).label}
             </span>
             <span className="ml-auto font-mono text-[10px] tracking-[0.14em] text-white">
-              {outpostUnitCode(outpost)}
+              {garrisonUnitCode(garrison)}
             </span>
           </div>
 
           {/* Wireframe illustration */}
           <div className="relative border-b border-white/15 bg-[#050505] px-3 py-2">
-            <WireframeOutpost />
+            <WireframeGarrison />
             <div className="absolute right-2 top-2 font-mono text-[8px] tracking-[0.2em] text-white/40">
-              {outpost.type}
+              {garrison.type}
             </div>
           </div>
 
@@ -164,13 +164,13 @@ export function UnitInfoPanel({ outpost, visible }: UnitInfoPanelProps) {
           <div className="space-y-2 px-3 py-3">
             <TelemetryRow
               label="POWER"
-              value={`${Math.round((outpost.compute / 120) * 100)}%`}
-              bar={Math.min(1, outpost.compute / 120)}
+              value={`${Math.round((garrison.compute / 120) * 100)}%`}
+              bar={Math.min(1, garrison.compute / 120)}
             />
             <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.16em]">
               <span className="text-white/45">SESSION</span>
               <span className="text-white/85">
-                {outpost.uptime > 0 ? fmtUptime(outpost.uptime * 1000) : "0s"}
+                {garrison.uptime > 0 ? fmtUptime(garrison.uptime * 1000) : "0s"}
               </span>
             </div>
             <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.16em]">
@@ -179,10 +179,10 @@ export function UnitInfoPanel({ outpost, visible }: UnitInfoPanelProps) {
                 <span
                   className="inline-block h-1.5 w-1.5 rounded-full"
                   style={{
-                    backgroundColor: signalMeta(outpost.health / outpost.maxHealth).color,
+                    backgroundColor: signalMeta(garrison.health / garrison.maxHealth).color,
                   }}
                 />
-                {signalMeta(outpost.health / outpost.maxHealth).label}
+                {signalMeta(garrison.health / garrison.maxHealth).label}
               </span>
             </div>
           </div>
@@ -213,7 +213,7 @@ export function UnitInfoPanel({ outpost, visible }: UnitInfoPanelProps) {
             </div>
             <div className="mt-1.5 flex items-center justify-between font-mono text-[8px] tracking-[0.16em]">
               <span className="text-white/85">
-                {tab === "PERFORMANCE" ? `${progress}%` : `${Math.round((outpost.health / outpost.maxHealth) * 100)}%`}
+                {tab === "PERFORMANCE" ? `${progress}%` : `${Math.round((garrison.health / garrison.maxHealth) * 100)}%`}
               </span>
               <span className="text-white/35">
                 {tab === "PERFORMANCE"
@@ -227,8 +227,8 @@ export function UnitInfoPanel({ outpost, visible }: UnitInfoPanelProps) {
 
           {/* Footer — node name + level */}
           <div className="flex items-center justify-between border-t border-white/15 px-3 py-1.5 font-mono text-[8px] tracking-[0.18em] text-white/45">
-            <span>{outpost.name}</span>
-            <span>LVL {outpost.level.toString().padStart(2, "0")}</span>
+            <span>{garrison.name}</span>
+            <span>LVL {garrison.level.toString().padStart(2, "0")}</span>
           </div>
         </motion.div>
       )}

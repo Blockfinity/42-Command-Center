@@ -94,7 +94,7 @@ export interface MapLayerSpec {
 }
 
 // ===== Interaction context =====
-// Passed from the host to layers that need user interaction (outpost selection,
+// Passed from the host to layers that need user interaction (garrison selection,
 // placement mode). This decouples layers from the global store.
 
 export interface MapInteraction {

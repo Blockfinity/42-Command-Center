@@ -6,13 +6,13 @@
 import {
   type GameState,
   type GameEvent,
-  type Outpost,
+  type Garrison,
   type FactionId,
   type Faction,
   type Territory,
   FACTIONS,
 } from "../../../src/lib/types";
-import { TERRITORY_DEFS, OUTPOST_SEED, FACTION_SEED, type SeedSpec } from "./data";
+import { TERRITORY_DEFS, GARRISON_SEED, FACTION_SEED, type SeedSpec } from "./data";
 
 let _id = 0;
 export const uid = (p: string) => `${p}-${(_id++).toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -20,9 +20,9 @@ export const now = () => Date.now();
 export const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 export const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-export function makeOutpost(s: SeedSpec): Outpost {
-  const baseCompute = s.type === "FULL" ? 42 : 11;
-  const baseHealth = s.type === "FULL" ? 100 : 55;
+export function makeGarrison(s: SeedSpec): Garrison {
+  const baseCompute = s.type === "Safehouse" ? 42 : 11;
+  const baseHealth = s.type === "Safehouse" ? 100 : 55;
   return {
     id: uid("op"),
     name: s.name,
@@ -30,19 +30,19 @@ export function makeOutpost(s: SeedSpec): Outpost {
     faction: s.faction,
     lat: s.lat,
     lng: s.lng,
-    level: s.type === "FULL" ? 2 : 1,
+    level: s.type === "Safehouse" ? 2 : 1,
     health: baseHealth,
     maxHealth: baseHealth,
     compute: baseCompute,
     uptime: Math.floor(Math.random() * 60000),
-    buildPoints: s.type === "FULL" ? 60 : 20,
+    buildPoints: s.type === "Safehouse" ? 60 : 20,
     status: "ONLINE",
     establishedAt: now() - Math.floor(Math.random() * 86400000),
   };
 }
 
-export function makeFaction(id: FactionId, outposts: Outpost[]): Faction {
-  const mine = outposts.filter((o) => o.faction === id);
+export function makeFaction(id: FactionId, garrisons: Garrison[]): Faction {
+  const mine = garrisons.filter((o) => o.faction === id);
   return {
     id,
     name: FACTION_SEED[id].name,
@@ -50,15 +50,15 @@ export function makeFaction(id: FactionId, outposts: Outpost[]): Faction {
     strength: clamp(40 + mine.length * 6),
     compute: mine.reduce((a, o) => a + o.compute, 0),
     territories: 0, // recomputed by recalcFactions() on the first tick
-    outposts: mine.length,
-    threat: clamp(30 + mine.filter((o) => o.type === "FULL").length * 8),
+    garrisons: mine.length,
+    threat: clamp(30 + mine.filter((o) => o.type === "Safehouse").length * 8),
   };
 }
 
 export function buildInitialState(): GameState {
-  const outposts = OUTPOST_SEED.map(makeOutpost);
+  const garrisons = GARRISON_SEED.map(makeGarrison);
   const factions = {} as Record<FactionId, Faction>;
-  for (const f of FACTIONS) factions[f] = makeFaction(f, outposts);
+  for (const f of FACTIONS) factions[f] = makeFaction(f, garrisons);
 
   const territories: Territory[] = TERRITORY_DEFS.map((d) => ({
     id: d.id,
@@ -92,7 +92,7 @@ export function buildInitialState(): GameState {
     sol: 893,
     clock: now(),
     factions,
-    outposts,
+    garrisons,
     missions: [],
     events,
     threatLevel: "GREEN",

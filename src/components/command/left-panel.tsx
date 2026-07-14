@@ -4,7 +4,7 @@ import * as React from "react";
 import { useCommand } from "@/stores/command";
 import type { NavView } from "./nav-rail";
 import { cn } from "@/lib/utils";
-import { FACTIONS, MISSION_META, type FactionId, type OutpostType, type MissionType } from "@/lib/types";
+import { FACTIONS, MISSION_META, type FactionId, type GarrisonType, type MissionType } from "@/lib/types";
 import { fmtUptime, FACTION_MARK_GLYPH } from "@/lib/format";
 import { Target, SatelliteDish, BrainCircuit, Rocket, ScanEye, ListChecks, Terminal, Orbit } from "lucide-react";
 
@@ -54,7 +54,7 @@ function MapSummary() {
   const state = useCommand((s) => s.state)!;
   const op = state.operative;
   const myFaction = state.factions[op.faction];
-  const mine = state.outposts.filter((o) => o.faction === op.faction);
+  const mine = state.garrisons.filter((o) => o.faction === op.faction);
   return (
     <>
       <PanelSection title={`STATION · ${op.faction}`}>
@@ -63,7 +63,7 @@ function MapSummary() {
           <Row k="TIER" v={op.tier} />
           <Row k="AUTHORITY" v={`${op.authority}`} />
           <Row k="DOCTRINE" v={myFaction.motto} />
-          <Row k="OUTPOSTS" v={`${mine.length}`} />
+          <Row k="GARRISONS" v={`${mine.length}`} />
           <Row k="COMPUTE" v={`${myFaction.compute} TF`} />
           <Row k="TERRITORIES" v={`${myFaction.territories}`} />
           <Row k="THREAT" v={`${myFaction.threat}`} />
@@ -79,11 +79,11 @@ function MapSummary() {
               </span>
               <span className="flex items-center gap-1.5 text-white/45">
                 <span className={cn("pip", o.status === "ONLINE" ? "" : o.status === "OFFLINE" ? "pip--dim" : "pip--crit")} style={{ width: 5, height: 5 }} />
-                {o.type === "FULL" ? "FULL" : "TAC"}
+                {o.type === "Safehouse" ? "SAFEHOUSE" : "TAC"}
               </span>
             </div>
           ))}
-          {mine.length === 0 && <Empty label="NO OUTPOSTS DEPLOYED" />}
+          {mine.length === 0 && <Empty label="NO GARRISONS DEPLOYED" />}
         </div>
       </PanelSection>
     </>
@@ -155,7 +155,7 @@ function FactionIntel() {
                 <Bar label="COMPUTE" v={Math.min(100, fac.compute / 4)} raw={`${fac.compute} TF`} />
               </div>
               <div className="mt-1.5 flex justify-between font-mono text-[9px] text-white/45">
-                <span>{fac.outposts} OUTPOSTS</span>
+                <span>{fac.garrisons} GARRISONS</span>
                 <span>{fac.territories} TERRITORIES</span>
               </div>
             </div>
@@ -183,8 +183,8 @@ function Bar({ label, v, raw }: { label: string; v: number; raw?: string }) {
 function StrikeConsole({ onNav }: { onNav: (v: NavView) => void }) {
   const state = useCommand((s) => s.state)!;
   const setPending = useCommand((s) => s.setPendingMission);
-  const select = useCommand((s) => s.selectOutpost);
-  const mine = state.outposts.filter((o) => o.faction === state.operative.faction && o.status !== "OFFLINE");
+  const select = useCommand((s) => s.selectGarrison);
+  const mine = state.garrisons.filter((o) => o.faction === state.operative.faction && o.status !== "OFFLINE");
   const types: MissionType[] = ["DRONE_STRIKE", "CYBER_ATTACK", "ESPIONAGE", "RECON", "BUILD", "DEFEND"];
   return (
     <div className="p-3">
@@ -192,7 +192,7 @@ function StrikeConsole({ onNav }: { onNav: (v: NavView) => void }) {
         <Target size={11} strokeWidth={1.5} /> STRIKE CONSOLE
       </div>
       <p className="mb-3 font-mono text-[9px] leading-snug text-white/45">
-        SELECT A MISSION PROFILE, THEN CHOOSE A SOURCE OUTPOST. TARGET SELECTION HAPPENS ON THE MAP.
+        SELECT A MISSION PROFILE, THEN CHOOSE A SOURCE GARRISON. TARGET SELECTION HAPPENS ON THE MAP.
       </p>
       <div className="space-y-1.5">
         {types.map((t) => {
@@ -213,7 +213,7 @@ function StrikeConsole({ onNav }: { onNav: (v: NavView) => void }) {
         })}
       </div>
       <div className="mt-3 border-t border-white/8 pt-3">
-        <div className="mb-1.5 font-mono text-[9px] tracking-mega text-white/45">SOURCE OUTPOSTS</div>
+        <div className="mb-1.5 font-mono text-[9px] tracking-mega text-white/45">SOURCE GARRISONS</div>
         <div className="space-y-1">
           {mine.map((o) => (
             <button
@@ -331,7 +331,7 @@ function DeployPanel() {
   return (
     <div className="p-3">
       <div className="mb-3 flex items-center gap-2 font-mono text-[9px] tracking-mega text-white/45">
-        <Rocket size={11} strokeWidth={1.5} /> DEPLOY OUTPOST
+        <Rocket size={11} strokeWidth={1.5} /> DEPLOY GARRISON
       </div>
       <p className="mb-3 font-mono text-[9px] leading-snug text-white/45">
         CHOOSE A NODE CLASS, THEN CLICK ANY POSITION ON THE WORLD MAP TO EMPLACE IT.
@@ -339,15 +339,15 @@ function DeployPanel() {
       </p>
       <div className="space-y-2">
         <DeployBtn
-          active={placement?.type === "FULL"}
-          onClick={() => setPlacement(placement?.type === "FULL" ? null : { type: "FULL" })}
-          title="FULL OUTPOST"
+          active={placement?.type === "Safehouse"}
+          onClick={() => setPlacement(placement?.type === "Safehouse" ? null : { type: "Safehouse" })}
+          title="SAFEHOUSE"
           sub="DEDICATED HARDWARE · HIGH COMPUTE · SLOW TO RAISE"
         />
         <DeployBtn
-          active={placement?.type === "TACTICAL"}
-          onClick={() => setPlacement(placement?.type === "TACTICAL" ? null : { type: "TACTICAL" })}
-          title="TACTICAL OUTPOST"
+          active={placement?.type === "Tactical Safehouse"}
+          onClick={() => setPlacement(placement?.type === "Tactical Safehouse" ? null : { type: "Tactical Safehouse" })}
+          title="TACTICAL SAFEHOUSE"
           sub="BROWSER WORKER · LIGHT COMPUTE · FAST TO RAISE"
         />
       </div>

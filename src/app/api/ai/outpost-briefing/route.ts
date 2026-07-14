@@ -1,40 +1,40 @@
 import { NextResponse } from "next/server";
 import ZAI from "z-ai-web-dev-sdk";
-import type { Outpost, OutpostBrief, OutpostBriefPriority, FactionId, ThreatLevel } from "@/lib/types";
+import type { Garrison, GarrisonBrief, GarrisonBriefPriority, FactionId, ThreatLevel } from "@/lib/types";
 
 // POST /api/ai/outpost-briefing
-// Body: { outpost, operativeFaction, sol, threatLevel }
-// Returns: OutpostBrief — AI-generated per-outpost situational assessment.
+// Body: { garrison, operativeFaction, sol, threatLevel }
+// Returns: GarrisonBrief — AI-generated per-garrison situational assessment.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface Body {
-  outpost?: Outpost;
+  garrison?: Garrison;
   operativeFaction?: FactionId;
   sol?: number;
   threatLevel?: ThreatLevel;
 }
 
-function fallback(outpost: Outpost, isMine: boolean): OutpostBrief {
-  const hp = outpost.health / outpost.maxHealth;
-  const priority: OutpostBriefPriority =
-    outpost.status === "UNDER_ATTACK" ? "CRITICAL"
-    : outpost.status === "OFFLINE" ? "HIGH"
+function fallback(garrison: Garrison, isMine: boolean): GarrisonBrief {
+  const hp = garrison.health / garrison.maxHealth;
+  const priority: GarrisonBriefPriority =
+    garrison.status === "UNDER_ATTACK" ? "CRITICAL"
+    : garrison.status === "OFFLINE" ? "HIGH"
     : hp < 0.4 ? "HIGH"
     : hp < 0.7 ? "MEDIUM"
     : "LOW";
   const assessment = isMine
-    ? `${outpost.name} (${outpost.type}) holds ${Math.round(outpost.health)}/${outpost.maxHealth} hull at level ${outpost.level}. ${outpost.status === "UNDER_ATTACK" ? "Under direct fire — shields critical." : outpost.status === "OFFLINE" ? "Signal lost." : "Operational."}`
-    : `${outpost.name} is a ${outpost.type === "FULL" ? "full" : "tactical"} node of ${outpost.faction}. Hull at ${Math.round(outpost.health)}/${outpost.maxHealth}. ${outpost.status === "UNDER_ATTACK" ? "Currently absorbing fire — window of opportunity." : outpost.status === "OFFLINE" ? "Dark — no signal." : "Active and surveilling."}`;
+    ? `${garrison.name} (${garrison.type}) holds ${Math.round(garrison.health)}/${garrison.maxHealth} hull at level ${garrison.level}. ${garrison.status === "UNDER_ATTACK" ? "Under direct fire — shields critical." : garrison.status === "OFFLINE" ? "Signal lost." : "Operational."}`
+    : `${garrison.name} is a ${garrison.type === "Safehouse" ? "full" : "tactical"} node of ${garrison.faction}. Hull at ${Math.round(garrison.health)}/${garrison.maxHealth}. ${garrison.status === "UNDER_ATTACK" ? "Currently absorbing fire — window of opportunity." : garrison.status === "OFFLINE" ? "Dark — no signal." : "Active and surveilling."}`;
   const recommendation = isMine
-    ? outpost.status === "UNDER_ATTACK"
+    ? garrison.status === "UNDER_ATTACK"
       ? "Raise shields immediately; reinforce hull with BUILD."
       : hp < 0.6
         ? "Reinforce with BUILD to restore hull integrity."
         : "Hold position; recon to accrue build points."
     : hp < 0.4
       ? "Commit a DRONE_STRIKE to finish the wounded node."
-      : outpost.status === "OFFLINE"
+      : garrison.status === "OFFLINE"
         ? "Inert target — infiltrate with ESPIONAGE for intel."
         : "Probe with ESPIONAGE before committing kinetic assets.";
   return {
@@ -42,8 +42,8 @@ function fallback(outpost: Outpost, isMine: boolean): OutpostBrief {
     recommendation,
     priority,
     confidence: 68,
-    votcAtStake: Math.round(outpost.compute * (outpost.type === "FULL" ? 120 : 40)),
-    token: outpost.faction,
+    votcAtStake: Math.round(garrison.compute * (garrison.type === "Safehouse" ? 120 : 40)),
+    token: garrison.faction,
     generatedAt: Date.now(),
   };
 }
@@ -55,19 +55,19 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "invalid-json" }, { status: 400 });
   }
-  const { outpost, operativeFaction, sol, threatLevel } = body;
-  if (!outpost || !operativeFaction) {
-    return NextResponse.json({ error: "missing-outpost" }, { status: 400 });
+  const { garrison, operativeFaction, sol, threatLevel } = body;
+  if (!garrison || !operativeFaction) {
+    return NextResponse.json({ error: "missing-garrison" }, { status: 400 });
   }
-  const isMine = outpost.faction === operativeFaction;
+  const isMine = garrison.faction === operativeFaction;
 
   try {
     const zai = await ZAI.create();
 
     const system = `You are ARIA, the AI operations co-pilot aboard the 42 command deck.
-You generate SHORT per-outpost situational briefs for a gamified decentralized compute network.
+You generate SHORT per-garrison situational briefs for a gamified decentralized compute network.
 Three factions (FANG, HAMMER, RESOLUTE) wage real-time wargames across a real world map.
-For OWN outposts: assess unit readiness. For RIVAL outposts: provide an intel snapshot.
+For OWN garrisons: assess unit readiness. For RIVAL garrisons: provide an intel snapshot.
 Respond with STRICT JSON only, no prose, matching this schema:
 {
   "assessment": "string — 1-2 sentences, present-tense, military tone",
@@ -78,23 +78,23 @@ Respond with STRICT JSON only, no prose, matching this schema:
 }
 "votcAtStake" = estimated VOTC value at stake (compute × duration factor).`;
 
-    const user = `Outpost:
+    const user = `Garrison:
 ${JSON.stringify({
-  name: outpost.name,
-  faction: outpost.faction,
-  type: outpost.type,
-  level: outpost.level,
-  health: Math.round(outpost.health),
-  maxHealth: outpost.maxHealth,
-  compute: outpost.compute,
-  uptime: outpost.uptime,
-  buildPoints: Math.round(outpost.buildPoints),
-  status: outpost.status,
-  establishedAt: outpost.establishedAt,
+  name: garrison.name,
+  faction: garrison.faction,
+  type: garrison.type,
+  level: garrison.level,
+  health: Math.round(garrison.health),
+  maxHealth: garrison.maxHealth,
+  compute: garrison.compute,
+  uptime: garrison.uptime,
+  buildPoints: Math.round(garrison.buildPoints),
+  status: garrison.status,
+  establishedAt: garrison.establishedAt,
 })}
 
 Context:
-- Operative faction: ${operativeFaction} (this outpost is ${isMine ? "OURS" : "RIVAL"})
+- Operative faction: ${operativeFaction} (this garrison is ${isMine ? "OURS" : "RIVAL"})
 - SOL cycle: ${sol}
 - Global threat: ${threatLevel}
 
@@ -109,18 +109,18 @@ Generate the ${isMine ? "unit readiness" : "intel snapshot"} brief now.`;
     });
 
     const raw = completion.choices[0]?.message?.content ?? "";
-    let parsed: OutpostBrief;
+    let parsed: GarrisonBrief;
     try {
       const cleaned = raw.replace(/^```json\s*|\s*```$/g, "").trim();
-      parsed = JSON.parse(cleaned) as OutpostBrief;
-      parsed.token = outpost.faction;
+      parsed = JSON.parse(cleaned) as GarrisonBrief;
+      parsed.token = garrison.faction;
       parsed.generatedAt = Date.now();
       if (!parsed.assessment || !parsed.recommendation) throw new Error("incomplete");
     } catch {
-      parsed = fallback(outpost, isMine);
+      parsed = fallback(garrison, isMine);
     }
     return NextResponse.json(parsed);
   } catch {
-    return NextResponse.json(fallback(outpost, isMine));
+    return NextResponse.json(fallback(garrison, isMine));
   }
 }

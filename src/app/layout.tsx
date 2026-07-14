@@ -22,13 +22,13 @@ const stencil = Saira_Stencil_One({
 export const metadata: Metadata = {
   title: "42 // COMMAND DECK",
   description:
-    "42 — a cinematic command interface for a gamified decentralized compute network. Place outposts, build territory, launch drone strikes, cyber attacks and espionage in real time across a real world map.",
+    "42 — a cinematic command interface for a gamified decentralized compute network. Place garrisons, build territory, launch drone strikes, cyber attacks and espionage in real time across a real world map.",
   keywords: [
     "42",
     "decentralized compute",
     "command interface",
     "real-time strategy",
-    "outposts",
+    "garrisons",
     "factions",
   ],
   authors: [{ name: "42 Network" }],

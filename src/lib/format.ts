@@ -1,4 +1,4 @@
-import type { FactionId, Outpost, ThreatLevel } from "@/lib/types";
+import type { FactionId, Garrison, ThreatLevel } from "@/lib/types";
 
 // Faction constants (FACTION_MARK_GLYPH, FACTION_OUTPOST_NUMBER, outpostNumber,
 // outpostNumberStr) now live in @/lib/factions — re-exported here for backward
@@ -33,9 +33,9 @@ export const THREAT_META: Record<ThreatLevel, { label: string; pip: string; puls
   BLACK: { label: "BLACK", pip: "pip--crit" },
 };
 
-// FACTION_MARK_GLYPH + outpost helpers re-exported from @/lib/factions (see top).
+// FACTION_MARK_GLYPH + garrison helpers re-exported from @/lib/factions (see top).
 
-export function outpostGlyph(o: Outpost): string {
+export function garrisonGlyph(o: Garrison): string {
   return FACTION_MARK_GLYPH[o.faction];
 }
 

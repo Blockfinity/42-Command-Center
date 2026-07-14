@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Outposts layer — white square markers with alphanumeric unit codes.
+// Garrisons layer — white square markers with alphanumeric unit codes.
 //
 // SINGLE-TIER RENDERING (matches the SurveilTrack reference):
 //   • Country/globe zoom (0–5): clustered white circle summaries
@@ -7,10 +7,10 @@
 //     alphanumeric unit codes (e.g. "FNG-3300-NYC"), bright + crisp.
 //
 // ONE CONTINUOUS experience — the same white-square marker aesthetic at all
-// zoom levels where individual outposts are visible. No two-mode transition.
+// zoom levels where individual garrisons are visible. No two-mode transition.
 //
-// Consumes source: "game:outposts" (clustered GeoJSON points).
-// Handles outpost click selection via the interaction context.
+// Consumes source: "game:garrisons" (clustered GeoJSON points).
+// Handles garrison click selection via the interaction context.
 // ---------------------------------------------------------------------------
 
 import type maplibregl from "maplibre-gl";
@@ -19,14 +19,14 @@ import type { MapLayerSpec } from "../types";
 import { GAME_SOURCE_IDS } from "../sources/game-engine.source";
 import { makeStreetMarker } from "../utils/sprites";
 
-const SRC = "outposts-src";
+const SRC = "garrisons-src";
 
-// ---- Cached outpost features for reliable lngLat-based click hit-testing ----
+// ---- Cached garrison features for reliable lngLat-based click hit-testing ----
 // queryRenderedFeatures is unreliable under the globe projection + pitch (symbol
 // and circle layers don't query consistently). Instead, onClick uses the click's
-// lngLat to find the nearest cached outpost within a threshold. This is 100%
+// lngLat to find the nearest cached garrison within a threshold. This is 100%
 // projection-independent.
-let cachedOutposts: { id: string; lng: number; lat: number }[] = [];
+let cachedGarrisons: { id: string; lng: number; lat: number }[] = [];
 
 /** Haversine distance in meters between two [lng,lat] points. */
 function haversineMeters(aLng: number, aLat: number, bLng: number, bLat: number): number {
@@ -39,9 +39,9 @@ function haversineMeters(aLng: number, aLat: number, bLng: number, bLat: number)
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-export const outpostsLayer: MapLayerSpec = {
-  id: "outposts",
-  sourceIds: [GAME_SOURCE_IDS.outposts],
+export const garrisonsLayer: MapLayerSpec = {
+  id: "garrisons",
+  sourceIds: [GAME_SOURCE_IDS.garrisons],
 
   addSources(map) {
     map.addSource(SRC, {
@@ -62,7 +62,7 @@ export const outpostsLayer: MapLayerSpec = {
   addLayers(map) {
     // ===== SELECTION / UNDER-ATTACK PULSE (animated, all zoom levels) =====
     map.addLayer({
-      id: "outpost-pulse",
+      id: "garrison-pulse",
       type: "circle",
       source: SRC,
       filter: ["any", ["==", ["get", "selected"], 1], ["==", ["get", "underAttack"], 1]],
@@ -75,13 +75,13 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
 
-    // ===== INDIVIDUAL OUTPOST MARKERS (zoom 5+) =====
+    // ===== INDIVIDUAL GARRISON MARKERS (zoom 5+) =====
 
-    // --- Outpost: transparent hitbox (reliable click target) ---
+    // --- Garrison: transparent hitbox (reliable click target) ---
     // Symbol layers aren't reliably returned by queryRenderedFeatures under
     // pitch, so this invisible circle layer acts as the click target.
     map.addLayer({
-      id: "outpost-hitbox",
+      id: "garrison-hitbox",
       type: "circle",
       source: SRC,
       filter: ["!", ["has", "point_count"]],
@@ -95,9 +95,9 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
 
-    // --- Outpost: white square marker (SurveilTrack-style, all zoom levels) ---
+    // --- Garrison: white square marker (SurveilTrack-style, all zoom levels) ---
     map.addLayer({
-      id: "outpost-square",
+      id: "garrison-square",
       type: "symbol",
       source: SRC,
       filter: ["!", ["has", "point_count"]],
@@ -107,16 +107,16 @@ export const outpostsLayer: MapLayerSpec = {
         "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.35, 8, 0.5, 12, 0.65, 14, 0.75, 16, 0.85, 18, 1.0],
         "icon-allow-overlap": true,
         "icon-ignore-placement": true,
-        "symbol-sort-key": ["match", ["get", "type"], "FULL", 2, "SAFEHOUSE", 3, 1],
+        "symbol-sort-key": ["match", ["get", "type"], "Safehouse", 2, 1],
       },
       paint: {
         "icon-opacity": ["case", ["==", ["get", "offline"], 1], 0.4, 1],
       },
     });
 
-    // --- Outpost: alphanumeric unit code label (e.g. "FNG-3300-NYC") ---
+    // --- Garrison: alphanumeric unit code label (e.g. "FNG-3300-NYC") ---
     map.addLayer({
-      id: "outpost-code",
+      id: "garrison-code",
       type: "symbol",
       source: SRC,
       filter: ["!", ["has", "point_count"]],
@@ -139,9 +139,9 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
 
-    // --- Outpost: selection bracket (brighter ring under the square) ---
+    // --- Garrison: selection bracket (brighter ring under the square) ---
     map.addLayer({
-      id: "outpost-select",
+      id: "garrison-select",
       type: "circle",
       source: SRC,
       filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "selected"], 1]],
@@ -158,7 +158,7 @@ export const outpostsLayer: MapLayerSpec = {
     // ===== CLUSTERS (globe/country zoom only — zoom 0–4) =====
 
     map.addLayer({
-      id: "outpost-clusters",
+      id: "garrison-clusters",
       type: "circle",
       source: SRC,
       filter: ["has", "point_count"],
@@ -172,7 +172,7 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
     map.addLayer({
-      id: "outpost-cluster-label",
+      id: "garrison-cluster-label",
       type: "symbol",
       source: SRC,
       filter: ["has", "point_count"],
@@ -193,10 +193,10 @@ export const outpostsLayer: MapLayerSpec = {
   onData(map, _sourceId, data) {
     const src = map.getSource(SRC) as maplibregl.GeoJSONSource | undefined;
     if (src) src.setData(data);
-    // Cache non-cluster outpost points for reliable lngLat-based click hit-testing.
+    // Cache non-cluster garrison points for reliable lngLat-based click hit-testing.
     const fc = data as FeatureCollection<Geometry>;
     if (fc && Array.isArray(fc.features)) {
-      cachedOutposts = fc.features
+      cachedGarrisons = fc.features
         .filter((f) => !f.properties?.point_count && f.geometry?.type === "Point")
         .map((f) => {
           const c = (f.geometry as { coordinates: [number, number] }).coordinates;
@@ -211,9 +211,9 @@ export const outpostsLayer: MapLayerSpec = {
     const pulse = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
     const radiusBoost = 4 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
     try {
-      if (map.getLayer("outpost-pulse")) {
-        map.setPaintProperty("outpost-pulse", "circle-opacity", pulse);
-        map.setPaintProperty("outpost-pulse", "circle-radius", [
+      if (map.getLayer("garrison-pulse")) {
+        map.setPaintProperty("garrison-pulse", "circle-opacity", pulse);
+        map.setPaintProperty("garrison-pulse", "circle-radius", [
           "interpolate", ["linear"], ["zoom"],
           0, 14 + radiusBoost, 4, 20 + radiusBoost, 8, 28 + radiusBoost, 12, 16, 16, 22,
         ]);
@@ -224,10 +224,10 @@ export const outpostsLayer: MapLayerSpec = {
   },
 
   onClick(map, e, ctx) {
-    // ---- Primary hit-test: nearest outpost to the click's lngLat ----
+    // ---- Primary hit-test: nearest garrison to the click's lngLat ----
     // queryRenderedFeatures is unreliable under the globe projection + pitch
     // (symbol/circle layers don't query consistently), so we use the click's
-    // geographic coordinates to find the nearest cached outpost within a
+    // geographic coordinates to find the nearest cached garrison within a
     // zoom-aware threshold. This is 100% projection-independent.
     const lngLat = e.lngLat as { lng: number; lat: number };
     const zoom = map.getZoom();
@@ -237,7 +237,7 @@ export const outpostsLayer: MapLayerSpec = {
     const thresholdMeters = zoom < 5 ? 50000 : zoom < 8 ? 8000 : zoom < 12 ? 2000 : 1200;
 
     let nearest: { id: string; dist: number } | null = null;
-    for (const op of cachedOutposts) {
+    for (const op of cachedGarrisons) {
       const d = haversineMeters(lngLat.lng, lngLat.lat, op.lng, op.lat);
       if (d <= thresholdMeters && (!nearest || d < nearest.dist)) {
         nearest = { id: op.id, dist: d };
@@ -259,7 +259,7 @@ export const outpostsLayer: MapLayerSpec = {
       [pt.x + tol, pt.y + tol],
     ];
     const clusterFeats = map.queryRenderedFeatures(box, {
-      layers: ["outpost-clusters"],
+      layers: ["garrison-clusters"],
     });
     if (clusterFeats.length > 0) {
       e.preventDefault();

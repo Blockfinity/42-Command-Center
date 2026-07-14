@@ -11,7 +11,7 @@ import { FACTION_MARK_GLYPH } from "@/lib/format";
  * StandingsArea — compact faction strength standings (pure presentation).
  *
  * On hover, reveals a compact detail popover with the full breakdown for all
- * three factions (compute, territories, outposts, threat).
+ * three factions (compute, territories, garrisons, threat).
  *
  * Data source: see `standings-area.data.ts` (`useStandingsData`). Swap that
  * file to plug this area into a different data source — this component is

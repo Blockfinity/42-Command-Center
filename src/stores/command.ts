@@ -6,7 +6,7 @@ import type {
   Briefing,
   ClientAction,
   MissionType,
-  OutpostType,
+  GarrisonType,
 } from "@/lib/types";
 import { io, type Socket } from "socket.io-client";
 
@@ -15,17 +15,17 @@ interface CommandStore {
   connected: boolean;
   briefing: Briefing | null;
   briefingLoading: boolean;
-  selectedOutpostId: string | null;
+  selectedGarrisonId: string | null;
   // mission launcher draft
   pendingMission: { type: MissionType; sourceId: string | null } | null;
-  placementMode: { type: OutpostType } | null;
+  placementMode: { type: GarrisonType } | null;
   socket: Socket | null;
   // actions
   init: () => () => void;
   sendAction: (a: ClientAction) => void;
-  selectOutpost: (id: string | null) => void;
+  selectGarrison: (id: string | null) => void;
   setPendingMission: (m: { type: MissionType; sourceId: string | null } | null) => void;
-  setPlacementMode: (m: { type: OutpostType } | null) => void;
+  setPlacementMode: (m: { type: GarrisonType } | null) => void;
   fetchBriefing: () => Promise<void>;
   clearBriefing: () => void;
 }
@@ -51,7 +51,7 @@ export const useCommand = create<CommandStore>((set, get) => ({
   connected: false,
   briefing: null,
   briefingLoading: false,
-  selectedOutpostId: null,
+  selectedGarrisonId: null,
   pendingMission: null,
   placementMode: null,
   socket: null,
@@ -83,7 +83,7 @@ export const useCommand = create<CommandStore>((set, get) => ({
     socket.emit("action", a);
   },
 
-  selectOutpost: (id) => set({ selectedOutpostId: id }),
+  selectGarrison: (id) => set({ selectedGarrisonId: id }),
 
   setPendingMission: (m) => set({ pendingMission: m }),
 

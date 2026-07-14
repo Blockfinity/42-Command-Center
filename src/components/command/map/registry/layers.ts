@@ -13,7 +13,7 @@ import type { MapLayerSpec } from "../types";
 import { roadsLayer } from "../layers/roads.layer";
 import { buildingsLayer } from "../layers/buildings.layer";
 import { territoryLayer } from "../layers/territory.layer";
-import { outpostsLayer } from "../layers/outposts.layer";
+import { garrisonsLayer } from "../layers/outposts.layer";
 import { missionsLayer } from "../layers/missions.layer";
 import { activityPingsLayer } from "../layers/activity-pings.layer";
 
@@ -26,5 +26,5 @@ export const LAYERS: MapLayerSpec[] = [
   territoryLayer,
   activityPingsLayer,
   missionsLayer,
-  outpostsLayer,
+  garrisonsLayer,
 ];

@@ -8,10 +8,10 @@ import {
   MISSION_META,
   NETWORK_CURRENCY,
   FACTION_TOKEN,
-  type Outpost,
+  type Garrison,
   type FactionId,
-  type OutpostBrief,
-  type OutpostBriefPriority,
+  type GarrisonBrief,
+  type GarrisonBriefPriority,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useSfx } from "@/hooks/use-sfx";
@@ -21,7 +21,7 @@ import { FACTION_LOGO } from "@/lib/factions";
 /**
  * Priority → badge styling (monochrome intensity).
  */
-const PRIORITY_STYLE: Record<OutpostBriefPriority, string> = {
+const PRIORITY_STYLE: Record<GarrisonBriefPriority, string> = {
   LOW: "text-white/50 border-white/15",
   MEDIUM: "text-white/75 border-white/30",
   HIGH: "text-white border-white/60",
@@ -29,35 +29,35 @@ const PRIORITY_STYLE: Record<OutpostBriefPriority, string> = {
 };
 
 /**
- * OutpostDetailCard — free-floating quick-view card shown when any outpost
+ * GarrisonDetailCard — free-floating quick-view card shown when any garrison
  * is clicked on the globe. Rich detail panel matching the command-deck
  * aesthetic: node identity, hull integrity, metrics grid, and contextual
- * action buttons (reinforce/defend/recon/upgrade for own outposts;
- * strike/cyber/espionage for rival outposts).
+ * action buttons (reinforce/defend/recon/upgrade for own garrisons;
+ * strike/cyber/espionage for rival garrisons).
  *
  * Close behaviors:
- *   • click the SAME outpost again → toggle close (handled by parent's
- *     handleOutpostSelect: id === selectedId → select(null))
- *   • click ANOTHER outpost → swap (parent sets new selectedId)
+ *   • click the SAME garrison again → toggle close (handled by parent's
+ *     handleGarrisonSelect: id === selectedId → select(null))
+ *   • click ANOTHER garrison → swap (parent sets new selectedId)
  *   • click EMPTY ocean on the map → close (map's general click handler)
  *   • click ANYWHERE outside the card (nav, panels, bars, body) → close
  *     (this component's pointerdown listener)
  *   • click inside the card → no-op (listener skips card subtree)
  *   • click on the map canvas → no-op here (map handles its own close logic
- *     above; skipping prevents a race with outpost-mark selection)
+ *     above; skipping prevents a race with garrison-mark selection)
  *
  * Positioned as an overlay in the map area (bottom-right). Free-floating
  * with a subtle backdrop-blur — no heavy container chrome.
  *
  * "REQUEST PRIORITY BRIEFING" — bottom section. Click → fetches a short
- * AI per-outpost brief (own = unit readiness, rival = intel snapshot)
+ * AI per-garrison brief (own = unit readiness, rival = intel snapshot)
  * from /api/ai/outpost-briefing. Denominated in VOTC + faction token.
  */
-export function OutpostDetailCard({
-  outpost,
+export function GarrisonDetailCard({
+  garrison,
   onClose,
 }: {
-  outpost: Outpost | null;
+  garrison: Garrison | null;
   onClose: () => void;
 }) {
   const cardRef = React.useRef<HTMLDivElement>(null);
@@ -65,10 +65,10 @@ export function OutpostDetailCard({
   // ---- click-outside-to-close ----
   // Listens for pointerdown anywhere on the document. Closes the card UNLESS
   // the click is (a) inside the card itself, or (b) inside the MapLibre map
-  // canvas — the map handles its own close semantics (outpost toggle/swap,
+  // canvas — the map handles its own close semantics (garrison toggle/swap,
   // empty-ocean close) and we must not race it.
   React.useEffect(() => {
-    if (!outpost) return;
+    if (!garrison) return;
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
       if (!target) return;
@@ -83,11 +83,11 @@ export function OutpostDetailCard({
     // capture phase so we evaluate before bubble handlers can stopPropagation
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [outpost, onClose]);
+  }, [garrison, onClose]);
 
   return (
     <AnimatePresence>
-      {outpost && (
+      {garrison && (
         <motion.div
           ref={cardRef}
           initial={{ opacity: 0, y: 12, scale: 0.96 }}
@@ -96,37 +96,37 @@ export function OutpostDetailCard({
           transition={{ duration: 0.22, ease: "easeOut" }}
           className="pointer-events-auto absolute bottom-4 right-4 z-40 flex max-h-[calc(100%-2rem)] w-80 flex-col border border-white/20 bg-black/85 backdrop-blur-md"
           role="dialog"
-          aria-label={`Outpost ${outpostNumber(outpost.faction)} details`}
+          aria-label={`Outpost ${outpostNumber(garrison.faction)} details`}
         >
           {/* ── node identity ─────────────────────────────────────────── */}
           <div className="flex items-start gap-3 border-b border-white/10 px-4 py-3">
             <img
-              src={FACTION_LOGO[outpost.faction]}
-              alt={`${outpost.faction} insignia`}
+              src={FACTION_LOGO[garrison.faction]}
+              alt={`${garrison.faction} insignia`}
               className="h-12 w-12 shrink-0 border border-white/30 object-cover"
               style={{ filter: "grayscale(1) contrast(1.3) brightness(1.1)" }}
             />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="font-mono text-[9px] tracking-mega text-white/45">
-                <span className="text-white/65">{FACTION_MARK_GLYPH[outpost.faction]}</span>{" "}
-                {outpost.faction} · {outpost.type === "FULL" ? "FULL NODE" : "TACTICAL NODE"}
+                <span className="text-white/65">{FACTION_MARK_GLYPH[garrison.faction]}</span>{" "}
+                {garrison.faction} · {garrison.type === "Safehouse" ? "SAFEHOUSE" : "TACTICAL SAFEHOUSE"}
               </div>
               <div className="flex items-baseline gap-1.5">
                 <span className="font-mono text-[22px] font-bold tracking-mega text-white text-glow">
-                  {outpostNumberStr(outpost.faction)}
+                  {outpostNumberStr(garrison.faction)}
                 </span>
                 <span className="font-mono text-[10px] tracking-wide-2 text-white/40">OUTPOST</span>
               </div>
               <div className="font-mono text-[12px] font-bold tracking-wide text-white">
-                {outpost.name.toUpperCase()}
+                {garrison.name.toUpperCase()}
               </div>
               <div className="font-mono text-[9px] tracking-wide-2 text-white/40">
-                {outpost.lat.toFixed(2)}°, {outpost.lng.toFixed(2)}° · LV {outpost.level}
+                {garrison.lat.toFixed(2)}°, {garrison.lng.toFixed(2)}° · LV {garrison.level}
               </div>
               {/* faction token indicator — each faction mints its own token
                   (HAMMER | FANG | RESOLUTE); VOTC is the network currency */}
               <div className="mt-1 flex items-center gap-2 font-mono text-[9px] tracking-wide-2 text-white/45">
-                <span className="text-white/70">{FACTION_TOKEN[outpost.faction]}</span>
+                <span className="text-white/70">{FACTION_TOKEN[garrison.faction]}</span>
                 <span className="text-white/25">TOKEN</span>
                 <span className="text-white/20">·</span>
                 <span>{NETWORK_CURRENCY} NETWORK</span>
@@ -140,7 +140,7 @@ export function OutpostDetailCard({
               >
                 <X size={12} strokeWidth={1.5} />
               </button>
-              <StatusBadge status={outpost.status} />
+              <StatusBadge status={garrison.status} />
             </div>
           </div>
 
@@ -151,42 +151,42 @@ export function OutpostDetailCard({
               <div className="flex justify-between font-mono text-[9px] tracking-wide-2 text-white/45">
                 <span>HULL INTEGRITY</span>
                 <span className="text-white/75">
-                  {Math.round(outpost.health)}/{outpost.maxHealth}
+                  {Math.round(garrison.health)}/{garrison.maxHealth}
                 </span>
               </div>
               <div className="mt-1.5 h-2 w-full bg-white/8">
                 <div
                   className={cn(
                     "h-full transition-all",
-                    outpost.health / outpost.maxHealth > 0.5
+                    garrison.health / garrison.maxHealth > 0.5
                       ? "bg-white/75"
-                      : outpost.health / outpost.maxHealth > 0.2
+                      : garrison.health / garrison.maxHealth > 0.2
                         ? "bg-white/55"
                         : "bg-white blink",
                   )}
-                  style={{ width: `${Math.max(0, (outpost.health / outpost.maxHealth) * 100)}%` }}
+                  style={{ width: `${Math.max(0, (garrison.health / garrison.maxHealth) * 100)}%` }}
                 />
               </div>
             </div>
 
             {/* metrics grid */}
             <div className="grid grid-cols-2 gap-px border-b border-white/8 bg-white/8">
-              <Metric k="COMPUTE" v={`${outpost.compute}`} unit="TF" />
-              <Metric k="UPTIME" v={fmtUptime(outpost.uptime * 1000)} />
-              <Metric k="BUILD PTS" v={`${Math.floor(outpost.buildPoints)}`} />
-              <Metric k="ESTABLISHED" v={fmtUptime(Date.now() - outpost.establishedAt)} />
+              <Metric k="COMPUTE" v={`${garrison.compute}`} unit="TF" />
+              <Metric k="UPTIME" v={fmtUptime(garrison.uptime * 1000)} />
+              <Metric k="BUILD PTS" v={`${Math.floor(garrison.buildPoints)}`} />
+              <Metric k="ESTABLISHED" v={fmtUptime(Date.now() - garrison.establishedAt)} />
             </div>
 
             {/* actions */}
-            <ActionList outpost={outpost} />
+            <ActionList garrison={garrison} />
           </div>
 
           {/* ── REQUEST PRIORITY BRIEFING (bottom section) ──────────────
-              Click → fetches a short AI per-outpost brief. Own outpost =
+              Click → fetches a short AI per-garrison brief. Own garrison =
               unit readiness; rival = intel snapshot. Denominated in VOTC
-              + the outpost's faction token. Stays pinned at the bottom,
+              + the garrison's faction token. Stays pinned at the bottom,
               outside the scroll area, so it's always reachable. */}
-          <PriorityBriefing outpost={outpost} />
+          <PriorityBriefing garrison={garrison} />
         </motion.div>
       )}
     </AnimatePresence>
@@ -195,15 +195,15 @@ export function OutpostDetailCard({
 
 // ── action list ──────────────────────────────────────────────────────────
 
-function ActionList({ outpost }: { outpost: Outpost }) {
+function ActionList({ garrison }: { garrison: Garrison }) {
   const state = useCommand((s) => s.state);
   const sendAction = useCommand((s) => s.sendAction);
   const setPending = useCommand((s) => s.setPendingMission);
 
   if (!state) return null;
-  const isMine = outpost.faction === state.operative.faction;
-  const upgradeCost = 50 + outpost.level * 25;
-  const buildCost = 40 + outpost.level * 20;
+  const isMine = garrison.faction === state.operative.faction;
+  const upgradeCost = 50 + garrison.level * 25;
+  const buildCost = 40 + garrison.level * 20;
 
   return (
     <div className="space-y-2 p-4">
@@ -213,9 +213,9 @@ function ActionList({ outpost }: { outpost: Outpost }) {
             icon={Hammer}
             label="REINFORCE (BUILD)"
             meta={`+LV · ${buildCost} BP`}
-            disabled={outpost.buildPoints < buildCost}
+            disabled={garrison.buildPoints < buildCost}
             onClick={() =>
-              sendAction({ kind: "launch-mission", missionType: "BUILD", sourceId: outpost.id, targetId: outpost.id })
+              sendAction({ kind: "launch-mission", missionType: "BUILD", sourceId: garrison.id, targetId: garrison.id })
             }
           />
           <ActionBtn
@@ -223,7 +223,7 @@ function ActionList({ outpost }: { outpost: Outpost }) {
             label="RAISE SHIELDS (DEFEND)"
             meta="+HULL · FREE"
             onClick={() =>
-              sendAction({ kind: "launch-mission", missionType: "DEFEND", sourceId: outpost.id, targetId: outpost.id })
+              sendAction({ kind: "launch-mission", missionType: "DEFEND", sourceId: garrison.id, targetId: garrison.id })
             }
           />
           <ActionBtn
@@ -231,15 +231,15 @@ function ActionList({ outpost }: { outpost: Outpost }) {
             label="ORBITAL RECON"
             meta="+BP · FREE"
             onClick={() =>
-              sendAction({ kind: "launch-mission", missionType: "RECON", sourceId: outpost.id, targetId: outpost.id })
+              sendAction({ kind: "launch-mission", missionType: "RECON", sourceId: garrison.id, targetId: garrison.id })
             }
           />
           <ActionBtn
             icon={Hammer}
-            label={`UPGRADE TO LV ${outpost.level + 1}`}
+            label={`UPGRADE TO LV ${garrison.level + 1}`}
             meta={`${upgradeCost} BP`}
-            disabled={outpost.buildPoints < upgradeCost}
-            onClick={() => sendAction({ kind: "upgrade-outpost", id: outpost.id })}
+            disabled={garrison.buildPoints < upgradeCost}
+            onClick={() => sendAction({ kind: "upgrade-garrison", id: garrison.id })}
           />
         </>
       ) : (
@@ -270,21 +270,21 @@ function ActionList({ outpost }: { outpost: Outpost }) {
 
 // ── priority briefing section (bottom, pinned) ───────────────────────────
 
-function PriorityBriefing({ outpost }: { outpost: Outpost }) {
+function PriorityBriefing({ garrison }: { garrison: Garrison }) {
   const state = useCommand((s) => s.state);
   const sfx = useSfx();
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [brief, setBrief] = React.useState<OutpostBrief | null>(null);
+  const [brief, setBrief] = React.useState<GarrisonBrief | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  // reset whenever the outpost changes (switching outposts in the card)
+  // reset whenever the garrison changes (switching garrisons in the card)
   React.useEffect(() => {
     setOpen(false);
     setBrief(null);
     setError(null);
     setLoading(false);
-  }, [outpost.id]);
+  }, [garrison.id]);
 
   async function handleRequest() {
     if (!state) return;
@@ -298,14 +298,14 @@ function PriorityBriefing({ outpost }: { outpost: Outpost }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          outpost,
+          garrison,
           operativeFaction: state.operative.faction,
           sol: state.sol,
           threatLevel: state.threatLevel,
         }),
       });
       if (!res.ok) throw new Error(`briefing ${res.status}`);
-      const b = (await res.json()) as OutpostBrief;
+      const b = (await res.json()) as GarrisonBrief;
       setBrief(b);
       sfx.play("confirm");
     } catch {
@@ -327,7 +327,7 @@ function PriorityBriefing({ outpost }: { outpost: Outpost }) {
           !open && "border-t-0",
         )}
         aria-expanded={open}
-        aria-controls="outpost-brief-body"
+        aria-controls="garrison-brief-body"
       >
         <span className="flex items-center gap-2">
           {loading ? (
@@ -346,7 +346,7 @@ function PriorityBriefing({ outpost }: { outpost: Outpost }) {
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            id="outpost-brief-body"
+            id="garrison-brief-body"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -367,9 +367,9 @@ function PriorityBriefing({ outpost }: { outpost: Outpost }) {
                 <>
                   <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
                     <span className="text-[9px] tracking-mega text-white/40">
-                      {outpost.faction === state?.operative.faction
-                        ? "UNIT READINESS · " + FACTION_TOKEN[outpost.faction]
-                        : "INTEL SNAPSHOT · " + FACTION_TOKEN[outpost.faction]}
+                      {garrison.faction === state?.operative.faction
+                        ? "UNIT READINESS · " + FACTION_TOKEN[garrison.faction]
+                        : "INTEL SNAPSHOT · " + FACTION_TOKEN[garrison.faction]}
                     </span>
                     <span
                       className={cn(

@@ -13,8 +13,8 @@ interface Body {
 }
 
 function fallbackBriefing(state: GameState): Briefing {
-  const mine = state.outposts.filter((o) => o.faction === state.operative.faction);
-  const rivals = state.outposts.filter((o) => o.faction !== state.operative.faction);
+  const mine = state.garrisons.filter((o) => o.faction === state.operative.faction);
+  const rivals = state.garrisons.filter((o) => o.faction !== state.operative.faction);
   const underAttack = mine.filter((o) => o.status === "UNDER_ATTACK");
   const weak = rivals.find((o) => o.health < 40 && o.status !== "OFFLINE");
   const recs: Recommendation[] = [];
@@ -50,13 +50,13 @@ function fallbackBriefing(state: GameState): Briefing {
     recs.push({
       id: "01",
       title: "CONSOLIDATE TERRITORY",
-      rationale: "No immediate threats. Reinforce your strongest outpost to extend the frontier.",
+      rationale: "No immediate threats. Reinforce your strongest garrison to extend the frontier.",
       action: `launch:BUILD:${mine[0]?.id ?? ""}:${mine[0]?.id ?? ""}`,
       confidence: 71,
     });
   }
   return {
-    summary: `Command deck nominal. ${mine.length} outposts under your banner. Threat level ${state.threatLevel}.`,
+    summary: `Command deck nominal. ${mine.length} garrisons under your banner. Threat level ${state.threatLevel}.`,
     threatAssessment: `Rival factions field ${rivals.length} nodes. Aggregate rival strength is ${Math.round(
       (state.factions.HAMMER.strength + state.factions.RESOLUTE.strength) / 2
     )}.`,
@@ -78,8 +78,8 @@ export async function POST(req: Request) {
   try {
     const zai = await ZAI.create();
 
-    const mine = state.outposts.filter((o) => o.faction === state.operative.faction);
-    const rivals = state.outposts.filter((o) => o.faction !== state.operative.faction);
+    const mine = state.garrisons.filter((o) => o.faction === state.operative.faction);
+    const rivals = state.garrisons.filter((o) => o.faction !== state.operative.faction);
 
     const compact = {
       sol: state.sol,
@@ -90,9 +90,9 @@ export async function POST(req: Request) {
         strength: f.strength,
         compute: f.compute,
         threat: f.threat,
-        outposts: f.outposts,
+        garrisons: f.garrisons,
       })),
-      myOutposts: mine.map((o) => ({
+      myGarrisons: mine.map((o) => ({
         name: o.name,
         type: o.type,
         level: o.level,
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
         buildPoints: Math.round(o.buildPoints),
         status: o.status,
       })),
-      rivalOutposts: rivals.map((o) => ({
+      rivalGarrisons: rivals.map((o) => ({
         name: o.name,
         faction: o.faction,
         type: o.type,
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
     const system = `You are ARIA, the AI operations co-pilot aboard the 42 command deck.
 You advise the commander of a gamified decentralized compute network where three factions
 (FANG, HAMMER, RESOLUTE) wage real-time wargames across a real world map.
-Outposts are full nodes; tactical outposts are browser-based worker nodes. Uptime accrues
+Garrisons are full nodes; tactical safehouses are browser-based worker nodes. Uptime accrues
 build points, which reinforce territory. Mission types: DRONE_STRIKE, CYBER_ATTACK,
 ESPIONAGE, RECON, BUILD, DEFEND.
 Respond with STRICT JSON only, no prose, matching this schema:
@@ -129,12 +129,12 @@ Respond with STRICT JSON only, no prose, matching this schema:
     { "id": "01", "title": "UPPERCASE SHORT TITLE", "rationale": "one sentence why", "action": "launch:TYPE:sourceId:targetId", "confidence": 0-100 }
   ]
 }
-Give 2-3 recommendations, ordered by priority. The "action" must use real outpost ids from the data when possible.`;
+Give 2-3 recommendations, ordered by priority. The "action" must use real garrison ids from the data when possible.`;
 
     const user = `Current state:\n${JSON.stringify(compact)}
 
-My outpost IDs (use as sourceId): ${JSON.stringify(mine.map((o) => ({ id: o.id, name: o.name })))}
-Rival outpost IDs (use as targetId): ${JSON.stringify(rivals.map((o) => ({ id: o.id, name: o.name })))}
+My garrison IDs (use as sourceId): ${JSON.stringify(mine.map((o) => ({ id: o.id, name: o.name })))}
+Rival garrison IDs (use as targetId): ${JSON.stringify(rivals.map((o) => ({ id: o.id, name: o.name })))}
 
 Generate the priority briefing now.`;
 
