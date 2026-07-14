@@ -1089,3 +1089,36 @@ Stage Summary:
 - Preview verified live: boot → deck → globe → ground view all functional, SurveilTrack aesthetic intact (529 3D buildings + 2138 roads + street markers at city zoom).
 - No code changes were needed in this session — only git hygiene (untrack + push) + verification. The codebase was already correct.
 - Ready for the user's next instruction.
+
+---
+Task ID: REBUILD-1
+Agent: Z.ai Code (main session)
+Task: Rebuild the 3D world + map as ONE continuous experience (Google Earth style, not two modes). Match the SurveilTrack reference aesthetic (dark monochrome, no satellite). User explicitly rejected the two-mode transition that GROUND-VIEW-1 had introduced.
+
+Work Log:
+- Read the user's reference image (SurveilTrack screenshot) via VLM glm-4.6v: pure dark monochrome vector, solid dark extruded buildings, white road lines, dark gray water, white square markers with alphanumeric codes. NO photographic satellite.
+- Re-read the MD file (Untitled document(2).md) lines 1495 + 2150: user explicitly said "is not a zoomed out view and a zoom in view is real time fully 3d map" and the architecture spec confirmed "One continuous 3D map (Google Earth style), not two modes."
+- Identified the drift: GROUND-VIEW-1 had introduced exactly the two-mode transition the spec rejected — satellite raster fading out (opacity 1.0→0.0 across zoom 11→13.5) replaced by a stylized dark cityscape. This was wrong.
+- Rebuilt map-controller.ts: removed the satellite raster source ENTIRELY. The basemap is now a single continuous dark monochrome style at ALL zoom levels: solid dark ocean fill (#050506), dark water bodies (#1a1a1f) from vector tiles, subtle country outlines that fade out at region zoom, no graticule, no satellite. Auto-pitch threshold lowered from 12→9 for a smoother continuous tilt.
+- Rebuilt buildings.layer.ts: minzoom lowered from 12→10 (buildings appear at region zoom, not just city). Height amplification now continuous 0.4×→2.2× across zoom 10→18 (was 1.0×→2.0× at 12→18). Color darkened to #0d0d0f (was #161616). Top cap opacity fades in continuously (was hard minzoom 13).
+- Rebuilt roads.layer.ts: minzoom lowered from 6→4 (major roads visible at country zoom). Width scaling now continuous from zoom 4 (was 6). Casing width boosted for better separation.
+- Rebuilt outposts.layer.ts: REMOVED the two-tier split (globe-tier faction sprites vs street-tier white squares). Now SINGLE-TIER: white square markers + alphanumeric codes at all zoom levels (zoom 5+). Clusters only at zoom 0-4. Removed faction sprite registration (makeFactionIcon no longer used). Renamed layers: outpost-square, outpost-code, outpost-select, outpost-hitbox (was outpost-shape, outpost-street-square, etc.).
+- Rebuilt map-view.tsx: removed City/District/Street layer tabs (implied modes). Removed groundView state sync. Zoom controls now always visible (Google Earth-like). UnitInfoPanel shows whenever an outpost is selected (was gated on isGroundView). HUD readout simplified (removed GLOBE/GROUND distinction).
+- Updated layer-host.tsx: updated hover layer IDs to match the renamed outpost layers.
+- Updated command-deck.tsx: removed groundView state subscription. OutpostDetailCard now always renders (was hidden in ground view).
+- Updated stores/command.ts: removed groundView boolean + setGroundView action.
+- Lint: 0 errors, 0 warnings.
+- Agent Browser + VLM verification at 3 zoom levels:
+  • Globe (zoom 1.6): VLM confirms "No photographic satellite imagery... pure dark-themed vector-based display." ✅
+  • Region (zoom 8, the OLD crossfade zone): VLM confirms "continuous dark monochrome vector map... white lines representing roads... no photographic details." ✅ (This is the critical test — the old code would have been mid-crossfade here.)
+  • Street (zoom 15, pitch 55): VLM confirms "dark monochrome tactical surveillance interface... 3D extruded buildings... white road lines... white square marker with FNG-2155-NYC... no photographic satellite imagery." ✅
+- Pushed to origin/main (5b9033c, includes auto-commit 6e4bfc6 for the 5 rebuilt map files).
+
+Stage Summary:
+- The map is now ONE continuous 3D dark monochrome experience — no satellite, no two-mode transition, no crossfade. Matches the SurveilTrack reference at all zoom levels.
+- Globe view: dark ocean + subtle country outlines + clustered outpost markers.
+- Region view: white road network emerges, buildings begin extruding.
+- Street view: full SurveilTrack 3D cityscape — dark extruded buildings with white roof caps, bright white road network, white square markers with alphanumeric codes (FNG-XXXX-XXX).
+- The modular architecture from MAP-REBUILD-2 is intact: registry/layers.ts, registry/sources.ts, NormalizedEvent vocabulary, swappable tile-provider. The rebuild only touched the basemap + layer styling, not the architecture.
+- Cost strategy unchanged: Esri-free path removed (no satellite), MapTiler dev (vector tiles only), self-hosted PMTiles for production (~$5/mo fixed).
+- Three scalability guarantees intact: append a layer file + register, add a source adapter + register, NormalizedEvent vocabulary is the contract.
