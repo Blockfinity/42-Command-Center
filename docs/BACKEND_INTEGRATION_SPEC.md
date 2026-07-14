@@ -27,34 +27,65 @@
 
 ## 2. Device & placement model
 
+### 2.1 Terminology (user-facing names locked)
+
+| Internal / backend | User-facing name | How it runs |
+|---|---|---|
+| Full node (daemon) | **Safehouse** | Background daemon process |
+| Partial node (plugin) | **Tactical Safehouse** | Browser/plugin-based, not a daemon |
+| ~~"full node" / "partial node"~~ | — | **Do not use these terms in UI** |
+
+### 2.2 Device model
+
 ```
 1 wallet  →  N devices
-              ├─ device A: FULL node      → can place 1 SAFEHOUSE  (lifetime, one-shot)
-              ├─ device B: PARTIAL node   → can place 1 TACTICAL   (lifetime, one-shot)
-              └─ device C: no node        → cannot place
+              ├─ device A: Safehouse installed      → can place 1 SAFEHOUSE  (lifetime, one-shot)
+              ├─ device B: Tactical Safehouse installed → can place 1 TACTICAL  (lifetime, one-shot)
+              └─ device C: nothing installed        → cannot place
 ```
 
-**Placement authorization is a triple gate** (all three required, none skippable):
+### 2.3 Placement = activation (locked)
+
+The flow is **install → place → run**, not install-and-run:
+
+```
+1. INSTALL    user downloads Safehouse or Tactical Safehouse software onto device
+              → node exists but is DORMANT (not running, not earning, not reporting)
+2. PLACE      user opens 42, connects wallet, picks location on map, places
+              → placement ACTIVATES the node — it starts running,
+                reports uptime to AORDF, begins earning VOTC
+3. RUN        activated node runs continuously (until device dies or user stops)
+```
+
+**Before placement:** the node is installed but dormant.
+**After placement:** the node is activated and running.
+**Placement is the activation step** — there is no separate "start" command.
+
+### 2.4 Placement authorization (triple gate)
+
+Placement is authorized only when all three conditions hold. The frontend **never** decides this locally — it asks 42 "can this device place?" and renders the answer.
 
 1. **Wallet owns the device** — wallet signature
-2. **Device is running the matching node type** — node-client attestation, source = 42
-   - `SAFEHOUSE` placement ← requires **FULL node** on the device
-   - `TACTICAL` placement ← requires **PARTIAL node** on the device
+2. **Device has the matching software installed but not yet activated** — node-client attestation, source = 42
+   - `SAFEHOUSE` placement ← requires **Safehouse** (daemon) installed on the device
+   - `TACTICAL` placement ← requires **Tactical Safehouse** (plugin) installed on the device
 3. **Device has not placed yet** — lifetime cap, source = 42
 
-The frontend **never** decides this locally. It asks 42 "can this device place?" and renders the answer.
+### 2.5 Faction anchor outposts (PENDING — needs user-facing name)
 
-**Open question (PENDING):** Does the node-running gate also apply to **FULL** outposts? Current assumption: FULL outposts are faction-anchor infrastructure (pre-existing HQs / NPC nodes), **not user-placeable**. Confirm before implementation.
+The pre-existing faction HQs ("Fang Prime", "Hammer Citadel", "Resolute Stand") are **not user-placeable** — they're faction-anchor infrastructure. Currently the code calls these `type: "FULL"`.
+
+Since the user confirmed "the only names we use are safehouse and tactical safehouse," the `FULL` type needs a new user-facing label. **PENDING:** What do we call these faction anchors? Candidates: "Faction HQ", "Command outpost", "Anchor".
 
 ---
 
 ## 3. Sol cycle (airdrop epoch)
 
-**Hybrid cadence: target window + 42-declared boundary.**
+**Hybrid cadence: 24h target window + 42-declared boundary.**
 
 | Aspect | Value |
 |---|---|
-| Default target cadence | 24h ("sol" = day, fits the name). Configurable by 42. **PENDING: confirm 24h vs 7d.** |
+| Default target cadence | **24h** ("sol" = day, fits the name). Configurable by 42. |
 | Cycle ID | Monotonic integer (`solCycle: 1247`), increments at each close |
 | Earnings accrual | **Continuous** — AORDF pushes earning events throughout the cycle |
 | Final tally | **42-only**, at cycle close — reads AORDF ledger, computes per-wallet amount, signs, emits `cycle:closed` |
@@ -182,22 +213,30 @@ AORDF reward formula ← ┤─ health (per-outpost, from AORDF mission/combat e
 | **Distribute** at cycle close | 42 (reads AORDF ledger, signs, airdrops) |
 | **Display** | Frontend (read-only, both pending and settled) |
 
-### 5.2 "Other items" in the formula — PENDING
+### 5.2 VOTC formula — owned entirely by AORDF, public
 
-User specified "uptime and health and other items". Candidates:
+**AORDF is the game.** It owns the full game logic: attacks, defenses, missions, the VOTC earnings formula, outpost health, discovery feed, mission pricing, token execution. The formula is **public through AORDF** (not through 42).
 
-| Possible input | Source | Why it might matter |
+The user specified the formula takes "uptime and health and other items" as inputs, but the complete input set and weights are AORDF's business — **42 does not enumerate, compute, or hide the formula.** 42's job is to pull the right data from AORDF and display it.
+
+**Scaling note:** Start by pulling the right data from AORDF (pending + settled VOTC, per-outpost accrual if AORDF exposes it). Optimize/scale later once the data shape is confirmed.
+
+### 5.3 Architecture — AORDF is the game, 42 is a viewer + cycle declarer
+
+| Layer | Owns | Doesn't own |
 |---|---|---|
-| Compute contribution (TFLOPS) | Node client | Reward proportional to work done, not just time |
-| Outpost level | AORDF | Higher-level outposts earn more per unit time |
-| Territory control bonus | AORDF | Holding contested territory pays a multiplier |
-| Faction victory bonus | AORDF | Winning faction of last cycle gets a boost |
-| Successful defenses | AORDF | Count of attacks repelled this cycle |
-| Network load share | AORDF | What % of network actions this node processed |
+| **AORDF** | Game logic (attacks, defenses, missions), VOTC formula (public), outpost health, discovery feed, mission pricing, token execution | Sol cycle declaration, airdrop distribution |
+| **42** | Sol cycle boundaries, airdrop distribution (reads AORDF ledger at close), map-based viewer for AORDF activity | Game logic, VOTC formula, mission pricing |
+| **Wallet** | VOTC balance (settled, on-chain) | Earnings calculation |
+| **Node client** | Uptime telemetry → reports to AORDF | Rewards |
 
-**PENDING:** Which of these (or others) are actually in the formula? And is the formula **public** (players see the weights) or **opaque** (AORDF returns a number, FE shows inputs but not formula)?
+**User entry points:**
+- Most users enter via **AORDF** (primary game interface)
+- Some users enter via **42** with their wallet (map-centric view)
 
-### 5.3 Data model changes
+**PENDING (Q1):** Can 42 submit actions (attacks, defenses, missions) to AORDF on behalf of the user, or must users go to AORDF to launch any action (with 42 being read-only)? The current 42 frontend has attack/defend buttons — if 42 is read-only, those buttons get removed; if 42 can submit to AORDF, they stay but route through AORDF as executor.
+
+### 5.4 Data model changes
 
 | Field | Current | New |
 |---|---|---|
@@ -205,27 +244,37 @@ User specified "uptime and health and other items". Candidates:
 | `Outpost.uptime` | per-outpost seconds | **Keep** — but *authoritative* uptime is measured by the node client and reported to AORDF. `outpost.uptime` becomes a display cache of the last known AORDF-reported value, not a locally-incremented counter. |
 | `Outpost.health` / `maxHealth` | per-outpost | **Keep** — AORDF is source of truth (missions modify it), frontend displays. |
 | `GameState.operative` | no balance fields | Add: `walletVotc: number` (settled), `pendingVotc: number` (this cycle, from AORDF) |
-| Per-outpost accrual breakdown | doesn't exist | **PENDING Option A/B** (see §5.4) |
+| Per-outpost accrual breakdown | doesn't exist | **PENDING Option A/B** (see §5.5) |
 
-### 5.4 Frontend display options
+### 5.5 Frontend display — PENDING Option A/B
 
-**Option A — wallet-level only:**
+**Option A — wallet total only:**
 ```
-VOTC BALANCE    PENDING (CYCLE 1247)
-12,847          +1,284
-```
-
-**Option B — wallet + per-outpost contribution (recommended):**
-```
-VOTC BALANCE    PENDING (CYCLE 1247)
-12,847          +1,284
-
-[per-outpost detail card shows:
-  FANG-2155-NYC contributes +412 VOTC this cycle
-  based on 4617h uptime · 78% health · 30 TF compute]
+┌─────────────────────────────────────┐
+│ VOTC BALANCE     PENDING (CYCLE 1247)│
+│ 12,847           +1,284              │
+└─────────────────────────────────────┘
 ```
 
-**Recommendation: Option B** — gives the player a reason to care about each outpost's health and uptime, which drives the gameplay loop (defend to keep health up = keep earning). Requires AORDF to expose per-outpost accrual breakdown.
+**Option B — wallet total + per-outpost breakdown:**
+```
+┌─────────────────────────────────────┐
+│ VOTC BALANCE     PENDING (CYCLE 1247)│
+│ 12,847           +1,284              │
+├─────────────────────────────────────┤
+│ EARNINGS BREAKDOWN                  │
+│ ▸ FNG-2155-NYC    +412 VOTC         │
+│   4617h uptime · 78% health · 30 TF │
+│ ▸ FNG-3300-LON    +318 VOTC         │
+│   2891h uptime · 92% health · 30 TF │
+│ ▸ FNG-0892-TYO    +554 VOTC         │
+│   6102h uptime · 65% health · 30 TF │
+└─────────────────────────────────────┘
+```
+
+**Recommendation: Option B** — gives the player a reason to care about each outpost's health and uptime, which drives the gameplay loop (defend to keep health up = keep earning). Requires AORDF to expose per-outpost accrual breakdown, not just a wallet total.
+
+**PENDING:** Which do you want — A (simpler, just the total) or B (per-outpost breakdown)?
 
 ---
 
@@ -277,16 +326,27 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | 13 | Uptime measured by node client → reported to AORDF; `Outpost.uptime` becomes display cache | ✅ Locked |
 | 14 | Health tracked by AORDF — missions modify it, reward calc reads it | ✅ Locked |
 | 15 | Sol cycle naming: display = "Sol cycle"; field = `solCycle` (cycle ID); mock increment deleted | ✅ Locked |
+| 16 | User-facing names: **Safehouse** (daemon/full node) + **Tactical Safehouse** (plugin/partial node) only — never "full node"/"partial node" in UI | ✅ Locked |
+| 17 | Placement = activation: install → place → run. Node is dormant until placed; placement activates it | ✅ Locked |
+| 18 | Sol cycle cadence = **24h** (target), 42-declared close | ✅ Locked |
+| 19 | AORDF is the game (owns all game logic, formula, pricing, health, discovery). 42 is a viewer + sol-cycle declarer + airdrop distributor. Formula is public through AORDF | ✅ Locked |
 
 ### Open questions (PENDING — need user confirmation before implementation)
 
-| # | Question | Context |
+| # | Question | Context | Status |
+|---|---|---|---|
+| Q1 | Can 42 submit actions to AORDF, or must users go to AORDF to launch attacks? | §5.3. Determines whether attack/defend buttons stay in 42 or get removed. | **PENDING** |
+| Q2 | What do we call the faction-anchor outposts ("Fang Prime" etc.)? | §2.5. Currently `type: "FULL"`; needs new user-facing label since only "Safehouse"/"Tactical Safehouse" are user-facing names. | **PENDING** |
+| Q3 | Per-outpost accrual breakdown in UI: Option A or B? | §5.5. Recommendation: B. | **PENDING** |
+
+### Resolved questions
+
+| # | Question | Resolution |
 |---|---|---|
-| Q1 | Does the node-running gate apply to FULL outposts? | Current assumption: FULL = faction-anchor, not user-placeable. §2. |
-| Q2 | Sol cycle default cadence: 24h or 7d? | §3. |
-| Q3 | What's in "other items" of the VOTC formula? | §5.2. |
-| Q4 | Formula public or opaque? | §5.2. |
-| Q5 | Per-outpost accrual breakdown in UI: Option A or B? | §5.4. Recommendation: B. |
+| ~~Q1~~ | ~~Does the node-running gate apply to FULL outposts?~~ | Confirmed: faction anchors (currently `FULL` type) are **not user-placeable** — only Safehouse and Tactical Safehouse are. Needs new user-facing name (now Q2 above). |
+| ~~Q2~~ | ~~Sol cycle default cadence: 24h or 7d?~~ | **24h** locked. §3. |
+| ~~Q3~~ | ~~What's in "other items" of the VOTC formula?~~ | Reframed: AORDF owns the full formula; 42 doesn't enumerate inputs. §5.2. |
+| ~~Q4~~ | ~~Formula public or opaque?~~ | **Public through AORDF**, not 42. §5.2. |
 
 ---
 

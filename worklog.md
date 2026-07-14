@@ -1161,3 +1161,32 @@ Stage Summary:
 - docs/BACKEND_INTEGRATION_SPEC.md is now the canonical reference for connecting the frontend to the real backend (Wallet, AORDF, 42). All 15 confirmed locks are recorded with their code-change implications; 5 open questions are flagged for user confirmation.
 - The spec supersedes the mock mini-services/game-engine behavior wherever they conflict (BP removal, sol-cycle semantics, VOTC accrual ownership, placement gating).
 - Next step: user resolves the 5 pending questions, then implementation proceeds in the 10-step order documented in §8 of the spec.
+
+---
+Task ID: SPEC-2
+Agent: Z.ai Code (main session)
+Task: Update backend integration spec with user's resolved answers to 4 of 5 pending questions; identify 2 new questions raised by the answers.
+
+Work Log:
+- Read user's 5 answers and worked through each:
+  1. Naming: locked "Safehouse" (daemon/full node) + "Tactical Safehouse" (plugin/partial node) as the only user-facing names. "Full node"/"partial node" terms removed from UI vocabulary. Captured the install-vs-activate distinction: placement = activation (install → place → run, node dormant until placed).
+  2. Sol cycle cadence: locked at 24h per my recommendation.
+  3. "Other items" in VOTC formula: reframed. AORDF is the game (owns all game logic, formula, pricing, health, discovery). 42 is a viewer + sol-cycle declarer + airdrop distributor. 42 doesn't enumerate formula inputs — just pulls data from AORDF and displays.
+  4. Formula visibility: public through AORDF, not 42.
+  5. Per-outpost accrual display (Option A/B): user didn't understand the question. Re-explained with concrete ASCII mockups of both options. Still pending.
+- Updated docs/BACKEND_INTEGRATION_SPEC.md:
+  - §2 restructured into 5 subsections: terminology (2.1), device model (2.2), placement=activation (2.3), triple gate (2.4), faction anchor naming pending (2.5)
+  - §3 sol cycle cadence locked at 24h
+  - §5.2 rewritten: VOTC formula owned entirely by AORDF, public. Removed the candidate-input enumeration table.
+  - §5.3 new: Architecture table (AORDF/42/Wallet/Node client — owns/doesn't-own). User entry points noted. PENDING Q1 added (can 42 submit actions to AORDF?).
+  - §5.4 (was 5.3): data model changes
+  - §5.5 (was 5.4): frontend display Option A/B with concrete ASCII mockups
+  - Lock list: added locks 16-19 (terminology, placement=activation, 24h cadence, AORDF-is-the-game architecture)
+  - Open questions: reduced from 5 to 3 (Q1: 42 action submission, Q2: faction anchor name, Q3: Option A/B display). Resolved questions table added showing the 4 that were answered.
+- NO CODE CHANGED — spec update only.
+
+Stage Summary:
+- Spec now reflects 19 confirmed locks + 3 pending questions (down from 5).
+- Key architectural clarification captured: AORDF is the game, 42 is a viewer + cycle declarer. This changes the implementation approach — 42's frontend pulls from AORDF rather than running its own game logic.
+- The install-vs-activate distinction is locked: placement is the activation step, not a separate "start" command. This affects the placement gate (device must have software installed but not yet activated, not "currently running").
+- 3 pending questions remain before implementation can begin: (Q1) can 42 submit actions to AORDF or is it read-only, (Q2) what to call faction-anchor outposts, (Q3) Option A or B for earnings display.
