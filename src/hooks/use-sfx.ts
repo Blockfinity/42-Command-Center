@@ -55,6 +55,15 @@ const CUES: Record<
     asset?: string;
     /** Volume for the asset-backed cue (0–1). Defaults to 0.8. */
     assetVolume?: number;
+    /**
+     * If true, each play is an INDEPENDENT instance that runs to completion
+     * and overlaps cleanly with subsequent plays (no rewind/cut-off). Used
+     * for rapid-fire cues like the boot sequence where each chime must be
+     * individual even when triggered every 240ms. Backed by a decoded
+     * AudioBuffer + one-shot AudioBufferSourceNodes (see playBuffer).
+     * Default false = cached HTMLAudioElement rewind+replay (restart style).
+     */
+    overlap?: boolean;
   }
 > = {
   key: { freq: 880, dur: 0.06, type: "square" },
@@ -70,8 +79,11 @@ const CUES: Record<
   // Boot sequence tick — backed by the real recorded asset, played once per
   // boot line as it prints (except the final "UPLINK ESTABLISHED" line,
   // which is covered by the link-established.mp3 stinger; the boot-screen
-  // component suppresses the cue for that last line).
-  boot: { freq: 180, dur: 0.04, type: "square", asset: "/sounds/bootup.mp3", assetVolume: 0.5 },
+  // component suppresses the cue for that last line). `overlap: true` so
+  // each chime is an independent instance that plays fully and overlaps
+  // cleanly with the next (240ms interval vs 1.3s sound — without overlap
+  // the cached element would be rewound mid-play and sound choppy).
+  boot: { freq: 180, dur: 0.04, type: "square", asset: "/sounds/bootup.mp3", assetVolume: 0.5, overlap: true },
   powerOn: { freq: 160, dur: 0.6, type: "triangle", sweep: 5.5 },
 };
 
@@ -85,7 +97,7 @@ function playCue(name: CueName) {
 
   // Asset-backed cue? Play the real file instead of synthesizing.
   if (spec.asset) {
-    playAsset(spec.asset, { volume: spec.assetVolume ?? 0.8 });
+    playAsset(spec.asset, { volume: spec.assetVolume ?? 0.8, overlap: spec.overlap ?? false });
     return;
   }
 
@@ -130,18 +142,24 @@ function playCue(name: CueName) {
 }
 
 // ── Asset playback ──────────────────────────────────────────────────────
-// Plays a real audio file (e.g. the "link established" stinger, or the UI
-// button-click asset backing the `click` cue) via an HTMLAudioElement.
-// Respects the same module-level `_muted` flag as the oscillator cues and
-// resumes the shared AudioContext so the asset is audible after a user
-// gesture.
+// Two playback paths for real audio files:
 //
-// Elements are cached per URL (module-level Map) so rapid re-triggering —
-// e.g. clicking several buttons quickly — rewinds + replays instantly
-// without allocating a new element each time. `prewarmAsset(url)` creates
-// (and starts fetching) an element without playing, so the first click is
-// latency-free.
+//   1. Cached HTMLAudioElement (rewind + replay) — the DEFAULT. Used for
+//      "restart" cues like UI button clicks where rapid re-triggering should
+//      cut the previous sound and restart from the beginning. One element per
+//      URL is cached; `currentTime = 0` + `play()` restarts it instantly.
+//
+//   2. Web Audio AudioBuffer (one-shot source nodes) — opt-in via
+//      `overlap: true`. Used for cues like the boot sequence where each
+//      chime must play FULLY and overlap cleanly with the next, even when
+//      triggered every 240ms (vs a 1.3s sound). The file is fetched + decoded
+//      ONCE into an in-memory AudioBuffer (via fetch + decodeAudioData);
+//      each play creates a fresh AudioBufferSourceNode that plays to
+//      completion and is GC'd. No re-fetching, no cut-offs, true overlap.
+//
+// Both paths respect the shared `_muted` flag and resume the AudioContext.
 const _assetCache = new Map<string, HTMLAudioElement>();
+const _bufferCache = new Map<string, AudioBuffer>();
 
 function getOrCreateAsset(url: string): HTMLAudioElement | null {
   if (typeof window === "undefined") return null;
@@ -158,12 +176,62 @@ function getOrCreateAsset(url: string): HTMLAudioElement | null {
   return el;
 }
 
-/** Create + fetch the asset without playing, so the first play() is instant. */
+/** Create + fetch the HTMLAudioElement without playing, so the first play() is instant. */
 function prewarmAsset(url: string): void {
   getOrCreateAsset(url);
 }
 
-function playAsset(url: string, opts?: { volume?: number }): HTMLAudioElement | null {
+/**
+ * Fetch + decode the audio file into an AudioBuffer for overlap-capable
+ * playback (see playBuffer). Idempotent — safe to call multiple times for
+ * the same URL. Runs asynchronously; the buffer becomes available in
+ * _bufferCache once decode completes.
+ */
+async function preloadBuffer(url: string): Promise<void> {
+  if (_bufferCache.has(url)) return;
+  const c = ctx();
+  if (!c) return;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const arr = await res.arrayBuffer();
+    const buf = await c.decodeAudioData(arr);
+    _bufferCache.set(url, buf);
+  } catch {
+    // decode failed — fall back to the HTMLAudioElement path at play time
+  }
+}
+
+/**
+ * Play a decoded AudioBuffer as a one-shot source node. Each call creates a
+ * fresh AudioBufferSourceNode + GainNode so simultaneous calls overlap
+ * cleanly without interfering. Source nodes auto-stop after the buffer ends
+ * and are GC'd — no cleanup needed.
+ */
+function playBuffer(url: string, opts?: { volume?: number }): boolean {
+  if (_muted) return false;
+  const c = ctx();
+  if (!c) return false;
+  const buf = _bufferCache.get(url);
+  if (!buf) return false;
+  if (c.state === "suspended") c.resume().catch(() => {});
+  try {
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const gain = c.createGain();
+    gain.gain.value = Math.min(1, Math.max(0, opts?.volume ?? 0.8));
+    src.connect(gain).connect(c.destination);
+    src.start();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function playAsset(
+  url: string,
+  opts?: { volume?: number; overlap?: boolean },
+): HTMLAudioElement | null {
   if (_muted) return null;
   if (typeof window === "undefined") return null;
   // Resume the shared context so any concurrent oscillator cues + the asset
@@ -171,10 +239,21 @@ function playAsset(url: string, opts?: { volume?: number }): HTMLAudioElement | 
   const c = ctx();
   if (c && c.state === "suspended") c.resume().catch(() => {});
 
+  const volume = Math.min(1, Math.max(0, opts?.volume ?? 0.8));
+  const overlap = opts?.overlap ?? false;
+
+  // Overlap path: try the decoded AudioBuffer first (zero-latency, true
+  // overlap, no cut-offs). If the buffer isn't decoded yet, fall through to
+  // the HTMLAudioElement path as a fallback.
+  if (overlap && playBuffer(url, { volume })) {
+    return null;
+  }
+
+  // Default / fallback: cached HTMLAudioElement, rewind + replay.
   const el = getOrCreateAsset(url);
   if (!el) return null;
   try {
-    el.volume = Math.min(1, Math.max(0, opts?.volume ?? 0.8));
+    el.volume = volume;
     // Rewind so rapid re-clicks replay from the start instead of continuing
     // the previous playback.
     el.currentTime = 0;
@@ -208,8 +287,13 @@ function playTick() {
 
 export interface SfxApi {
   play: (name: CueName) => void;
-  /** Play a real audio asset (e.g. the "link established" stinger). Respects mute. */
-  playAsset: (url: string, opts?: { volume?: number }) => void;
+  /**
+   * Play a real audio asset (e.g. the "link established" stinger). Respects
+   * mute. Pass `overlap: true` for rapid-fire cues where each play should be
+   * an independent instance that overlaps cleanly with the next (uses a
+   * decoded AudioBuffer + one-shot source nodes).
+   */
+  playAsset: (url: string, opts?: { volume?: number; overlap?: boolean }) => void;
   resume: () => void;
   toggle: () => void;
   muted: boolean;
@@ -221,18 +305,22 @@ export function useSfx(): SfxApi {
   // re-render when muted flips so consumers see the change
   const [muted, setMuted] = React.useState(_muted);
 
-  // Prewarm every asset-backed cue (fetch without playing) so the first
-  // click on any button is latency-free. Runs once per mount; idempotent
-  // because getOrCreateAsset caches the element.
+  // Prewarm every asset-backed cue so the first play is latency-free:
+  //   • HTMLAudioElement prewarm (getOrCreateAsset) for all asset cues
+  //   • AudioBuffer preload (fetch + decode) for overlap cues, so the
+  //     one-shot source-node path is ready immediately
+  // Runs once per mount; both are idempotent via their caches.
   React.useEffect(() => {
     for (const spec of Object.values(CUES)) {
-      if (spec.asset) prewarmAsset(spec.asset);
+      if (!spec.asset) continue;
+      prewarmAsset(spec.asset);
+      if (spec.overlap) void preloadBuffer(spec.asset);
     }
   }, []);
 
   const play = React.useCallback((name: CueName) => playCue(name), []);
   const playAssetCb = React.useCallback(
-    (url: string, opts?: { volume?: number }) => {
+    (url: string, opts?: { volume?: number; overlap?: boolean }) => {
       playAsset(url, opts);
     },
     [],
