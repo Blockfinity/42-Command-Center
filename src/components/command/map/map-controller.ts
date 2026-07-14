@@ -6,6 +6,9 @@
 // the base style (satellite + coastlines + graticule), handles camera centering,
 // and runs the auto-rotate rAF loop that pauses on user interaction.
 //
+// The controller also stores the initial "home" camera and exposes resetHome()
+// so the layer-host can implement the "click empty ocean → reset globe" feature.
+//
 // The controller does NOT know about gameplay layers or data sources — those
 // are mounted by the layer-host after the map loads.
 // ---------------------------------------------------------------------------
@@ -50,15 +53,30 @@ export interface CreateMapOptions {
   zoom?: number;
 }
 
+export interface MapController {
+  map: maplibregl.Map;
+  /** Ease the camera back to the initial home view (center/zoom/bearing/pitch). */
+  resetHome: () => void;
+  /** Pause auto-rotate for the given duration (ms). Used during easeTo resets. */
+  pauseAutoRotate: (ms: number) => void;
+  /** Destroy the map + all listeners + rAF loops. */
+  destroy: () => void;
+}
+
 /**
  * Create the MapLibre map instance with the base tactical style.
- * Returns the map + a cleanup function.
+ * Returns the controller with resetHome + destroy helpers.
  */
-export function createMap(opts: CreateMapOptions): {
-  map: maplibregl.Map;
-  destroy: () => void;
-} {
+export function createMap(opts: CreateMapOptions): MapController {
   const { container, center, zoom = 1.6 } = opts;
+
+  // Stash the home camera so resetHome() can ease back to exactly the boot view.
+  const homeCamera = {
+    center,
+    zoom,
+    bearing: 0,
+    pitch: 0,
+  };
 
   const map = new maplibregl.Map({
     container,
@@ -117,6 +135,7 @@ export function createMap(opts: CreateMapOptions): {
   // ---- Auto-rotate loop (pauses 3.5s after user interaction) ----
   let lastInteract = performance.now();
   let rafId: number | null = null;
+  let pauseUntil = 0;
 
   const onInteract = () => { lastInteract = performance.now(); };
   container.addEventListener("pointerdown", onInteract);
@@ -125,13 +144,32 @@ export function createMap(opts: CreateMapOptions): {
 
   const rotateLoop = () => {
     const now = performance.now();
-    if (now - lastInteract > 3500) {
+    if (now - lastInteract > 3500 && now > pauseUntil) {
       const b = map.getBearing();
       map.jumpTo({ bearing: b + 0.05 });
     }
     rafId = requestAnimationFrame(rotateLoop);
   };
   rafId = requestAnimationFrame(rotateLoop);
+
+  const pauseAutoRotate = (ms: number) => {
+    lastInteract = performance.now();
+    pauseUntil = performance.now() + ms;
+  };
+
+  const resetHome = () => {
+    // Pause auto-rotate for 3.5s to cover the 900ms ease + margin.
+    // NOTE: do NOT call map.stop() — calling stop() in the same tick as easeTo
+    // prevents the ease from starting (MapLibre quirk).
+    pauseAutoRotate(3500);
+    map.easeTo({
+      center: homeCamera.center,
+      zoom: homeCamera.zoom,
+      bearing: homeCamera.bearing,
+      pitch: homeCamera.pitch,
+      duration: 900,
+    });
+  };
 
   const destroy = () => {
     if (rafId !== null) cancelAnimationFrame(rafId);
@@ -141,5 +179,5 @@ export function createMap(opts: CreateMapOptions): {
     map.remove();
   };
 
-  return { map, destroy };
+  return { map, resetHome, pauseAutoRotate, destroy };
 }

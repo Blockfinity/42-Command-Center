@@ -758,3 +758,49 @@ Stage Summary:
 - Gap Analysis: 18-row capability matrix vs SurveilTrack reference, 7 critical gaps identified and prioritized.
 - PRD: 4-phase roadmap (Dashboard → Multi-user → Real telemetry → Scaling), 16 functional requirements, non-functional requirements, architecture evolution diagram, success metrics, 7-risk mitigation table.
 - PDF is 26 pages, dark-theme, professional, VLM-verified at 8/10.
+
+---
+Task ID: MAP-REBUILD-2
+Agent: Z.ai Code (main session)
+Task: Rebuild the modular map platform (lost in previous session) after checking the GitHub repo first. Sync upstream changes.
+
+Work Log:
+- Checked GitHub repo (Blockfinity/42-Command-Center) via API with user's PAT
+- Found two branches: `master` (empty README only) and `main` (150 files, latest commit ef51135 "feat(map): click empty ocean resets globe")
+- Confirmed: NO modular map platform (`src/components/command/map/`) exists in the repo — the previous session's rebuild was never committed/pushed; it was lost as uncommitted working-directory changes
+- Identified upstream features my local was missing: boot/powerOn SFX cues, advanced boot-screen (242 lines with streaming boot sequence), right-panel.tsx, globe-reset-on-empty-click, command-deck handleConnect tweak
+- Synced upstream files: use-sfx.ts (boot/powerOn cues), boot-screen.tsx (full boot sequence), right-panel.tsx
+- Applied upstream command-deck tweak: removed sfx.play("key") from handleConnect (BootScreen owns the click sound now)
+- Rebuilt the modular map platform from scratch (13 files under src/components/command/map/):
+  - types.ts — NormalizedEvent vocabulary, MapSourceSpec, MapLayerSpec, MapInteraction
+  - tile-provider.ts — swappable tile source (Esri free default, MapTiler/self-hosted via env var)
+  - map-controller.ts — MapLibre init + globe + auto-rotate + resetHome() (globe-reset feature from upstream)
+  - map-context.ts — React context for map instance + interaction
+  - registry/sources.ts — source registry + event bus + BOOT_SOURCES array
+  - registry/layers.ts — ordered LAYERS array (append to add visualizations)
+  - sources/game-engine.source.ts — subscribes to zustand store (single socket), converts GameState → 4 GeoJSON FeatureCollections
+  - layers/territory.layer.ts — control polygons + per-outpost halos
+  - layers/outposts.layer.ts — faction markers + health rings + clustering + selection pulse + click/hover
+  - layers/missions.layer.ts — aggressive/passive arcs + impact glows + progress heads
+  - layers/activity-pings.layer.ts — sonar ring + core (the "millions of actions" layer)
+  - utils/geo.ts + utils/sprites.ts — re-exports from @/lib/map/* and @/lib/factions
+  - layer-host.tsx — orchestrator: mounts layers, routes NormalizedEvents, single rAF loop, single click handler with globe-reset fallback
+  - map-view.tsx — main component (replaces world-map.tsx), creates controller, renders LayerHost + HUD overlays
+- Updated command-deck.tsx: WorldMap → MapView, added initialCenter computation, applied handleConnect tweak
+- Fixed missing registry/sources.ts file (initial write failed due to missing parent directory)
+- Fixed layer-host startAll() API (removed unused emit parameter)
+- Lint: 0 errors, 0 warnings
+- Agent Browser verification: boot screen → ESTABLISH UPLINK → command deck → map renders (canvas 1280×779), HUD shows live data (16 NODES, territory counts, NET LOAD, SYSTEM TIME), GET /api/state 200, zero console/dev.log errors
+
+Stage Summary:
+- The modular map platform is rebuilt and verified working in the preview
+- Architecture: sources emit NormalizedEvents → layer-host routes to layers → layers render MapLibre visualizations
+- Three scalability guarantees:
+  1. Add a visualization → append one file to layers/ + one line in registry/layers.ts
+  2. Add a data source → create sources/<name>.source.ts + add to BOOT_SOURCES (zero layer code changes)
+  3. Add a gamification feature → the NormalizedEvent vocabulary is the contract (42/AORDF/future AR apps become sources)
+- Cost at scale: Esri satellite (free) + swappable to self-hosted PMTiles (~$5/mo fixed) via NEXT_PUBLIC_MAP_TILE_PROVIDER env var
+- Globe-reset feature from upstream incorporated: click empty ocean → easeTo home camera + deselect
+- Upstream SFX (boot/powerOn) and boot-screen (streaming boot sequence) synced
+- The old monolithic world-map.tsx is still present but no longer imported (can be deleted once confident)
+- Next steps when user is ready: push to GitHub repo, then proceed with 42 backend mounting or QA/testing task

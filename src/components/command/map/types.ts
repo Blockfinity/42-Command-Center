@@ -73,12 +73,22 @@ export interface MapLayerSpec {
    */
   animate?: (map: maplibregl.Map, now: number) => void;
   /**
-   * Map click handler. Called for clicks on the map canvas.
-   * Use `map.queryRenderedFeatures()` to check if this layer was hit.
+   * Map click handler. Called for every map click (in LAYERS array order).
+   * Use `map.queryRenderedFeatures()` to check if this layer was hit, and
+   * call `e.preventDefault()` to stop subsequent layers from processing.
+   * The interaction context is passed so layers can call onSelect/onMapClick.
    */
-  onClick?: (map: maplibregl.Map, e: maplibregl.MapMouseEvent & { features?: unknown[] }) => void;
-  /** Hover cursor management. */
-  onHover?: (map: maplibregl.Map, entering: boolean) => void;
+  onClick?: (
+    map: maplibregl.Map,
+    e: maplibregl.MapMouseEvent & { features?: unknown[] },
+    ctx: { interaction: MapInteraction | null },
+  ) => void;
+  /** Hover cursor management. Called on mouseenter/mouseleave for this layer's features. */
+  onHover?: (
+    map: maplibregl.Map,
+    entering: boolean,
+    ctx: { interaction: MapInteraction | null },
+  ) => void;
   /** Cleanup. Called on unmount. */
   destroy?: (map: maplibregl.Map) => void;
 }

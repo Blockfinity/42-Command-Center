@@ -15,8 +15,9 @@ import { useSfx } from "@/hooks/use-sfx";
 import { useClockData } from "@/components/command/header/clock-area.data";
 import { MISSION_META, type OutpostType } from "@/lib/types";
 
-// WorldMap is client-only (MapLibre WebGL) — load dynamically
-const WorldMap = dynamic(() => import("@/components/command/world-map").then((m) => m.WorldMap), {
+// MapView is client-only (MapLibre WebGL) — load dynamically.
+// This is the modular map platform: src/components/command/map/
+const MapView = dynamic(() => import("@/components/command/map/map-view").then((m) => m.MapView), {
   ssr: false,
   loading: () => <div className="flex h-full w-full items-center justify-center bg-black" />,
 });
@@ -41,9 +42,10 @@ export function CommandDeck() {
   const [bootError, setBootError] = React.useState(false);
 
   // ---- connect gate: only start socket after user clicks ESTABLISH UPLINK ----
+  // BootScreen owns the click sound (transition cue + uplink sequence);
+  // parent just resumes AudioContext + flips the started flag.
   function handleConnect() {
     sfx.resume();
-    sfx.play("key");
     setStarted(true);
   }
 
@@ -174,6 +176,15 @@ export function CommandDeck() {
 
   const hasState = !!state;
 
+  // ---- compute initial map center from operative's home outpost ----
+  const initialCenter: [number, number] = React.useMemo(() => {
+    if (!state) return [-32, 8];
+    const mine = state.outposts.find(
+      (o) => o.faction === state.operative.faction && o.type === "FULL",
+    );
+    return mine ? [mine.lng, mine.lat] : [-32, 8];
+  }, [state]);
+
   // ---- outpost detail card (shown for any selected outpost) ----
   const selectedOutpost = selectedId ? state?.outposts.find((o) => o.id === selectedId) ?? null : null;
 
@@ -195,8 +206,8 @@ export function CommandDeck() {
           {/* Full-screen map stage */}
           <main className="vignette absolute inset-0 bg-black">
             <div className="grid-overlay--major absolute inset-0 opacity-60" />
-            <WorldMap
-              state={state!}
+            <MapView
+              initialCenter={initialCenter}
               selectedId={selectedId}
               onSelect={handleOutpostSelect}
               onMapClick={handleMapClick}

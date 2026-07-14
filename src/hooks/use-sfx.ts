@@ -20,7 +20,7 @@ import * as React from "react";
  *   sfx.stopTicking()      — stop the ticking ambience
  */
 
-type CueName = "key" | "click" | "confirm" | "deny" | "select" | "transition" | "place";
+type CueName = "key" | "click" | "confirm" | "deny" | "select" | "transition" | "place" | "boot" | "powerOn";
 
 // ── module-level singleton (shared across all hook callers) ──────────────
 let _ctx: AudioContext | null = null;
@@ -48,6 +48,8 @@ const CUES: Record<CueName, { freq: number; dur: number; type?: OscillatorType; 
   select: { freq: 520, dur: 0.05, type: "square" },
   transition: { freq: 420, dur: 0.1, type: "triangle", sweep: 1.8 },
   place: { freq: 300, dur: 0.14, type: "triangle", sweep: 2.2 },
+  boot: { freq: 180, dur: 0.04, type: "square" },
+  powerOn: { freq: 160, dur: 0.6, type: "triangle", sweep: 5.5 },
 };
 
 function playCue(name: CueName) {
@@ -55,6 +57,27 @@ function playCue(name: CueName) {
   const c = ctx();
   if (!c) return;
   if (c.state === "suspended") c.resume().catch(() => {});
+
+  // powerOn — custom rising-sweep envelope (quiet build → peak → quick cutoff)
+  // Feels like a proper "system online" moment, not a static blip.
+  if (name === "powerOn") {
+    const t0 = c.currentTime;
+    const dur = 0.6;
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(160, t0);
+    osc.frequency.exponentialRampToValueAtTime(880, t0 + dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.05, t0 + dur * 0.55);
+    gain.gain.exponentialRampToValueAtTime(0.14, t0 + dur * 0.85);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain).connect(c.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+    return;
+  }
+
   const spec = CUES[name] ?? CUES.click;
   const osc = c.createOscillator();
   const gain = c.createGain();
