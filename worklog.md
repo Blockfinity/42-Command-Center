@@ -804,3 +804,43 @@ Stage Summary:
 - Upstream SFX (boot/powerOn) and boot-screen (streaming boot sequence) synced
 - The old monolithic world-map.tsx is still present but no longer imported (can be deleted once confident)
 - Next steps when user is ready: push to GitHub repo, then proceed with 42 backend mounting or QA/testing task
+
+---
+Task ID: MAPTILER-1
+Agent: Z.ai Code (main session)
+Task: Apply MapTiler key for dev and add MapTiler vector tile layers (roads + 3D buildings) per the architecture doc.
+
+Work Log:
+- Read the uploaded conversation history (Untitled document(2).md) to catch up on the full context: the modular map platform architecture, the cost analysis (Esri free / self-hosted PMTiles ~$5/mo), the normalized event vocabulary, the hot-pluggable source/layer registry, and the previous session's MAP-REBUILD-2 work
+- Verified the modular map platform IS in place locally (15 files under src/components/command/map/) and committed (8 commits ahead of origin/main)
+- Verified command-deck.tsx imports MapView (not the old world-map.tsx monolith)
+- Applied the MapTiler key via .env.local (NEXT_PUBLIC_MAP_TILE_PROVIDER=maptiler + NEXT_PUBLIC_MAPTILER_KEY) — .env.local is already in .gitignore so the key won't be committed to the public repo
+- Extended tile-provider.ts with buildVectorSource() + hasVectorTiles() — returns MapTiler vector tiles (OpenMapTiles schema) for the maptiler provider, null for Esri (satellite-only)
+- Updated map-controller.ts to conditionally add the "vector-tiles" source when the provider ships vector tiles
+- Created layers/roads.layer.ts — thin white road lines (opacity by road class: motorway/trunk brightest, service roads dimmest), minzoom 6, separate path layer at minzoom 12
+- Created layers/buildings.layer.ts — 3D fill-extrusion (dark gray #1a1a1a bodies, render_height property), minzoom 14, building edges at minzoom 16
+- Registered both layers in registry/layers.ts (before the gameplay layers so they render underneath)
+- Increased map maxZoom from 8 to 18 (was clamping at 8, preventing the buildings layer at minzoom 14 from ever showing)
+- Added window.__map debug hook in map-view.tsx for QA testing (zoom, inspect layers, query features)
+- Lint: 0 errors, 0 warnings
+- Agent Browser verification:
+  - Boot screen → ESTABLISH UPLINK → command deck loads ✅
+  - MapTiler satellite tiles load (HTTP 200, 100+ requests) ✅
+  - Vector-tiles source present in map style ✅
+  - roads-line + roads-path + buildings-3d + buildings-edge layers all mounted ✅
+  - At zoom 15 over NYC: 929 road features + 381 building features rendered ✅
+  - VLM confirms: real satellite Earth, white road lines on satellite imagery, 3D building extrusions visible at pitch 60 ✅
+  - Globe view at zoom 1.6 renders correctly with HUD overlays ✅
+  - No console errors (the eval errors during reload were test artifacts, not app bugs) ✅
+  - Socket.io handshake works (direct curl returns valid sid + upgrades) ✅
+  - Game state loads via REST (GET /api/state 200) ✅
+
+Stage Summary:
+- MapTiler is now the active tile provider for dev (satellite + vector tiles)
+- The tile-provider abstraction is fully functional: swap to Esri (free) or self-hosted PMTiles (~$5/mo) via a single env var change, zero code changes
+- Roads layer renders thin white lines with opacity by road class (tactical monochrome aesthetic)
+- Buildings layer renders 3D fill-extrusions at city zoom (zoom 14+) with proper height from render_height property
+- Both layers gracefully degrade: when the provider has no vector tiles (Esri), addLayers() is a no-op
+- The modular map platform now has 6 layers: roads, buildings, territory, activity-pings, missions, outposts
+- Cost at scale: MapTiler free tier (100K loads/mo) for dev → self-hosted PMTiles (~$5/mo fixed) for production → Esri satellite ($0) always available as fallback
+- Ready for next steps: push to GitHub, then 42 backend mounting or QA/testing task

@@ -84,6 +84,11 @@ export function MapView({
 
     setMap(m);
 
+    // Debug hook — exposes the map instance for QA testing (zoom, inspect layers).
+    if (typeof window !== "undefined") {
+      (window as unknown as { __map?: maplibregl.Map }).__map = m;
+    }
+
     const onMove = () => {
       setBearing(Math.round(m.getBearing()));
       setCenterLat(Math.round(m.getCenter().lat));

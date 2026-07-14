@@ -10,6 +10,8 @@
 // ---------------------------------------------------------------------------
 
 import type { MapLayerSpec } from "../types";
+import { roadsLayer } from "../layers/roads.layer";
+import { buildingsLayer } from "../layers/buildings.layer";
 import { territoryLayer } from "../layers/territory.layer";
 import { outpostsLayer } from "../layers/outposts.layer";
 import { missionsLayer } from "../layers/missions.layer";
@@ -17,6 +19,10 @@ import { activityPingsLayer } from "../layers/activity-pings.layer";
 
 /** Ordered layer list (bottom → top). Append to add new visualizations. */
 export const LAYERS: MapLayerSpec[] = [
+  // --- Base vector layers (roads/buildings) — provider-dependent ---
+  roadsLayer,
+  buildingsLayer,
+  // --- Gameplay layers ---
   territoryLayer,
   activityPingsLayer,
   missionsLayer,

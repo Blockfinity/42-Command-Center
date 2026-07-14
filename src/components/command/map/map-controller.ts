@@ -17,7 +17,7 @@ import maplibregl from "maplibre-gl";
 import type { FeatureCollection, Geometry, GeoJSON } from "geojson";
 import { feature } from "topojson-client";
 import worldTopo from "world-atlas/countries-10m.json";
-import { buildRasterSource } from "./tile-provider";
+import { buildRasterSource, buildVectorSource } from "./tile-provider";
 
 // ---- Static world data (computed once at module scope) ----
 const worldFeat = feature(
@@ -78,6 +78,12 @@ export function createMap(opts: CreateMapOptions): MapController {
     pitch: 0,
   };
 
+  // Conditionally add the vector tile source (roads/buildings/labels).
+  // Only present when the active provider ships vector tiles (MapTiler, self-hosted).
+  // Esri satellite-only baseline has no vector tiles — layers that reference
+  // this source skip mounting when it's absent.
+  const vectorSource = buildVectorSource();
+
   const map = new maplibregl.Map({
     container,
     style: {
@@ -88,6 +94,7 @@ export function createMap(opts: CreateMapOptions): MapController {
         world: { type: "geojson", data: worldFeat as unknown as GeoJSON.GeoJSON },
         ocean: { type: "geojson", data: { type: "FeatureCollection", features: [oceanFeature] } },
         graticule: { type: "geojson", data: graticuleFeat as unknown as GeoJSON.GeoJSON },
+        ...(vectorSource ? { "vector-tiles": vectorSource } : {}),
       },
       layers: [
         // Real satellite Earth — desaturated + darkened to monochrome tactical
@@ -121,7 +128,7 @@ export function createMap(opts: CreateMapOptions): MapController {
     },
     center,
     zoom,
-    maxZoom: 8,
+    maxZoom: 18,
     minZoom: 0,
     bearing: 0,
     attributionControl: false,
