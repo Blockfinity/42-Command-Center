@@ -98,6 +98,34 @@ function playCue(name: CueName) {
   osc.stop(t0 + spec.dur + 0.02);
 }
 
+// ── Asset playback ──────────────────────────────────────────────────────
+// Plays a real audio file (e.g. the "link established" cinematic stinger)
+// via an HTMLAudioElement. Respects the same module-level `_muted` flag as
+// the oscillator cues and resumes the shared AudioContext so the asset is
+// audible after a user gesture. The element is created per-call so the same
+// asset can overlap itself if triggered rapidly; browsers GC it once it ends.
+function playAsset(url: string, opts?: { volume?: number }): HTMLAudioElement | null {
+  if (_muted) return null;
+  if (typeof window === "undefined") return null;
+  // Resume the shared context so any concurrent oscillator cues + the asset
+  // share the same unlocked audio session.
+  const c = ctx();
+  if (c && c.state === "suspended") c.resume().catch(() => {});
+
+  try {
+    const el = new Audio(url);
+    el.volume = Math.min(1, Math.max(0, opts?.volume ?? 0.8));
+    el.preload = "auto";
+    // best-effort: play() returns a promise that can reject if the browser
+    // still considers this a non-gesture autoplay; swallow that quietly.
+    const p = el.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    return el;
+  } catch {
+    return null;
+  }
+}
+
 function playTick() {
   if (_muted) return;
   const c = ctx();
@@ -118,6 +146,8 @@ function playTick() {
 
 export interface SfxApi {
   play: (name: CueName) => void;
+  /** Play a real audio asset (e.g. the "link established" stinger). Respects mute. */
+  playAsset: (url: string, opts?: { volume?: number }) => void;
   resume: () => void;
   toggle: () => void;
   muted: boolean;
@@ -130,6 +160,12 @@ export function useSfx(): SfxApi {
   const [muted, setMuted] = React.useState(_muted);
 
   const play = React.useCallback((name: CueName) => playCue(name), []);
+  const playAssetCb = React.useCallback(
+    (url: string, opts?: { volume?: number }) => {
+      playAsset(url, opts);
+    },
+    [],
+  );
   const resume = React.useCallback(() => {
     const c = ctx();
     if (c && c.state === "suspended") c.resume().catch(() => {});
@@ -153,5 +189,5 @@ export function useSfx(): SfxApi {
     }
   }, []);
 
-  return { play, resume, toggle, muted, startTicking, stopTicking };
+  return { play, playAsset: playAssetCb, resume, toggle, muted, startTicking, stopTicking };
 }

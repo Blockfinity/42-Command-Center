@@ -26,9 +26,10 @@ const FACTION_WALLPAPER: Record<FactionId, string> = {
 //     then the full boot sequence streams line-by-line. Each line plays a
 //     deep "boot" tick. The bar fills 0 → 100% as lines print.
 //
-//   • DONE — when the last line prints, a "powerOn" rising sweep plays,
-//     the button flips to "UPLINK ESTABLISHED", and after a short beat
-//     onConnect() fires so the parent loads the command deck.
+//   • DONE — when the last line prints, the "link established" cinematic
+//     stinger (/sounds/link-established.mp3) plays, the button flips to
+//     "UPLINK ESTABLISHED", and after a short beat onConnect() fires so
+//     the parent loads the command deck.
 //
 // All audio happens after the user gesture, so browser autoplay policies
 // are satisfied.
@@ -93,12 +94,14 @@ export function BootScreen({
     return () => clearTimeout(timer);
   }, [phase, lineCount]);
 
-  // ── When the last line prints: play powerOn sweep, mark done, fire onConnect
+  // ── When the last line prints: play the "link established" stinger,
+  //    mark done, fire onConnect.
   React.useEffect(() => {
     if (phase === "connecting" && lineCount >= TOTAL_LINES && !firedRef.current) {
       firedRef.current = true;
       setDone(true);
-      sfxRef.current.play("powerOn");
+      // Real cinematic stinger for the uplink-established moment.
+      sfxRef.current.playAsset("/sounds/link-established.mp3", { volume: 0.85 });
       const t = setTimeout(() => onConnectRef.current(), 420);
       return () => clearTimeout(t);
     }
@@ -121,7 +124,7 @@ export function BootScreen({
     sfx.play("transition");
     setPhase("connecting");
     // onConnect() is called by the done-effect after the boot sequence
-    // completes, so the full cinematic + powerOn sweep play first.
+    // completes, so the full cinematic + "link established" stinger play first.
   }
 
   // Button label + state
