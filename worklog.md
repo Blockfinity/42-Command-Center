@@ -1384,3 +1384,24 @@ Stage Summary:
 - The legacy world-map.tsx + lib/map/layers.ts (dead code) have also been renamed for consistency, so the codebase has no stale `Outpost`/`outpost` references to the placed-structure concept.
 - The API route path `/api/ai/outpost-briefing` is intentionally preserved (only internal code renamed).
 - A pre-existing runtime ReferenceError in converters.ts:79 (calling the old `outpostUnitCode` name) was discovered and fixed.
+
+---
+Task ID: SAVE-1
+Agent: Z.ai Code (main session)
+Task: Ensure everything is saved and update the repo (push Garrison rename to origin).
+
+Work Log:
+- Verified working tree state: `git status` → clean (nothing uncommitted).
+- Verified lint: `bun run lint` → 0 errors, 0 warnings.
+- Verified dev server health: `tail dev.log` → all `GET / 200`, `GET /api/state 200`, no runtime errors. The earlier "Fast Refresh had to perform a full reload" was a transient HMR event during the multi-file refactor and has since recovered (subsequent renders return 200 with low latency, e.g. `GET / 200 in 33ms`).
+- Inspected the 2 unpushed commits (`origin/main..HEAD`):
+  • `b57b4ff` — docs/BACKEND_INTEGRATION_SPEC.md GarrisonType value corrections ("Safehouse" | "Tactical Safehouse", 9 locations) + worklog entry.
+  • `1c73f82` — the full Outpost→Garrison rename across 34 files (types.ts, mini-services/game-engine/*, 13 frontend components, 7 map subsystem files, 2 API routes, 2 legacy/dead-code files, stores, lib) + worklog entry. 550 insertions / 517 deletions.
+- Confirmed remote: `origin → https://github.com/Blockfinity/42-Command-Center.git`.
+- Appended this worklog entry, then committed + pushed.
+
+Stage Summary:
+- The Outpost→Garrison rename (placed-structure concept only) is fully committed and pushed to origin/main.
+- The top-level "Outpost" concept (Outpost 33 FANG, etc.) and `factions.ts` (FACTION_OUTPOST_NUMBER, outpostNumber, outpostNumberStr) remain untouched, as required.
+- Repo is in a clean, lint-passing, runtime-healthy state on origin/main.
+- Ready for the next phase of backend integration (architectural foundation / source adapter layer / BP removal) when the user gives the go-ahead.
