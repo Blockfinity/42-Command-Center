@@ -71,11 +71,41 @@ Placement is authorized only when all three conditions hold. The frontend **neve
    - `TACTICAL` placement ← requires **Tactical Safehouse** (plugin) installed on the device
 3. **Device has not placed yet** — lifetime cap, source = 42
 
-### 2.5 Faction anchor outposts (PENDING — needs user-facing name)
+### 2.5 Faction HQ outposts (PENDING — do they exist in the real system?)
 
-The pre-existing faction HQs ("Fang Prime", "Hammer Citadel", "Resolute Stand") are **not user-placeable** — they're faction-anchor infrastructure. Currently the code calls these `type: "FULL"`.
+The current mock seed data includes pre-existing faction HQ outposts coded as `type: "FULL"`:
 
-Since the user confirmed "the only names we use are safehouse and tactical safehouse," the `FULL` type needs a new user-facing label. **PENDING:** What do we call these faction anchors? Candidates: "Faction HQ", "Command outpost", "Anchor".
+```
+Fang Prime, Fang Spire, Fang Vault, Fang Reach       (FANG HQs)
+Hammer Forge, Hammer Anvil, Hammer Crucible, ...      (HAMMER HQs)
+Resolute Stand, Resolute Watch, Resolute Drift, ...   (RESOLUTE HQs)
+```
+
+These are not user-placed — they're faction starting infrastructure. The user asked "what is an anchor?" (didn't recognize the term), so the concept itself needs confirmation.
+
+**PENDING:** Do pre-existing faction HQs exist in the real system, or does every outpost start as a user-placed Safehouse/Tactical Safehouse?
+
+- **If they exist:** they need a user-facing name (since "FULL" is banned per lock 22). What do we call them? "Faction HQ"? "Command post"?
+- **If they don't exist:** every outpost on the map is user-placed. Factions don't have home bases — just collections of user-placed outposts.
+
+### 2.6 Ownership model (locked)
+
+| Concept | Owner |
+|---|---|
+| Safehouse / Tactical Safehouse (the outpost) | **The user's wallet** (whoever placed it owns it) |
+| Faction (FANG / HAMMER / RESOLUTE) | Allegiance, not ownership — the user picks a faction, their outposts fight for that faction |
+| Outpost name | User-chosen at placement (per lock 20) |
+| User's handle/name | Shown on preview card only during successful sabotage (per lock 21) |
+
+The faction doesn't "own" outposts; users do. Faction is just which side you fight for.
+
+### 2.7 User-named outposts (locked)
+
+Users name their own Safehouses and Tactical Safehouses at placement time. The `Outpost.name` field becomes user-provided (was auto-generated "FANG NODE 5" in the mock). The alphanumeric code (FNG-2155-NYC) is separate and system-generated — both display together.
+
+### 2.8 Sabotage attribution (locked, detail deferred)
+
+The placing user's handle (`Outpost.ownerName`) appears on the outpost preview card — **but only visible during successful sabotage**. When someone sabotages your outpost, you see their name. The exact visibility rules (how long the name shows, who can see it, retroactive vs. live) are **deferred to later**.
 
 ---
 
@@ -243,20 +273,16 @@ The user specified the formula takes "uptime and health and other items" as inpu
 | `Outpost.buildPoints` | per-outpost BP accrual | **Remove** (BP doesn't exist; AORDF accrues VOTC at wallet level) |
 | `Outpost.uptime` | per-outpost seconds | **Keep** — but *authoritative* uptime is measured by the node client and reported to AORDF. `outpost.uptime` becomes a display cache of the last known AORDF-reported value, not a locally-incremented counter. |
 | `Outpost.health` / `maxHealth` | per-outpost | **Keep** — AORDF is source of truth (missions modify it), frontend displays. |
+| `Outpost.name` | auto-generated "FANG NODE 5" | **User-provided at placement** (per lock 20) |
+| `Outpost.ownerName` | doesn't exist | **Add** — placing user's handle; shown on preview card only during sabotage (per lock 21) |
+| `Outpost.ownerWallet` | doesn't exist | **Add** — placing user's wallet address; for ownership verification |
+| `OutpostType` enum | `"FULL" \| "TACTICAL" \| "SAFEHOUSE"` | **Remove `"FULL"`** (per lock 22). Final values depend on §2.5 (do faction HQs exist?). If no faction HQs: `"SAFEHOUSE" \| "TACTICAL"`. |
 | `GameState.operative` | no balance fields | Add: `walletVotc: number` (settled), `pendingVotc: number` (this cycle, from AORDF) |
-| Per-outpost accrual breakdown | doesn't exist | **PENDING Option A/B** (see §5.5) |
+| Per-outpost accrual breakdown | doesn't exist | **Add** — Option B confirmed (per lock 23). AORDF must expose per-outpost accrual. |
 
-### 5.5 Frontend display — PENDING Option A/B
+### 5.5 Frontend display — Option B confirmed
 
-**Option A — wallet total only:**
-```
-┌─────────────────────────────────────┐
-│ VOTC BALANCE     PENDING (CYCLE 1247)│
-│ 12,847           +1,284              │
-└─────────────────────────────────────┘
-```
-
-**Option B — wallet total + per-outpost breakdown:**
+**Option B — wallet total + per-outpost breakdown (locked):**
 ```
 ┌─────────────────────────────────────┐
 │ VOTC BALANCE     PENDING (CYCLE 1247)│
@@ -272,9 +298,7 @@ The user specified the formula takes "uptime and health and other items" as inpu
 └─────────────────────────────────────┘
 ```
 
-**Recommendation: Option B** — gives the player a reason to care about each outpost's health and uptime, which drives the gameplay loop (defend to keep health up = keep earning). Requires AORDF to expose per-outpost accrual breakdown, not just a wallet total.
-
-**PENDING:** Which do you want — A (simpler, just the total) or B (per-outpost breakdown)?
+**Rationale:** Gives the player a reason to care about each outpost's health and uptime, which drives the gameplay loop (defend to keep health up = keep earning). Requires AORDF to expose per-outpost accrual breakdown, not just a wallet total.
 
 ---
 
@@ -330,23 +354,27 @@ The frontend's `NormalizedEvent` vocabulary (`point:upsert`, `arc:upsert`, `heat
 | 17 | Placement = activation: install → place → run. Node is dormant until placed; placement activates it | ✅ Locked |
 | 18 | Sol cycle cadence = **24h** (target), 42-declared close | ✅ Locked |
 | 19 | AORDF is the game (owns all game logic, formula, pricing, health, discovery). 42 is a viewer + sol-cycle declarer + airdrop distributor. Formula is public through AORDF | ✅ Locked |
+| 20 | Users name their own Safehouses/Tactical Safehouses at placement time (custom name, not auto-generated) | ✅ Locked |
+| 21 | User's handle (`ownerName`) appears on outpost preview card — only visible during successful sabotage. Detail deferred. | ✅ Locked |
+| 22 | No "node" or "full" terminology anywhere — frontend OR backend. `OutpostType` enum removes `"FULL"`. Safehouse = daemon, Tactical Safehouse = plugin. | ✅ Locked |
+| 23 | VOTC earnings display = Option B (wallet total + per-outpost accrual breakdown) | ✅ Locked |
 
 ### Open questions (PENDING — need user confirmation before implementation)
 
 | # | Question | Context | Status |
 |---|---|---|---|
-| Q1 | Can 42 submit actions to AORDF, or must users go to AORDF to launch attacks? | §5.3. Determines whether attack/defend buttons stay in 42 or get removed. | **PENDING** |
-| Q2 | What do we call the faction-anchor outposts ("Fang Prime" etc.)? | §2.5. Currently `type: "FULL"`; needs new user-facing label since only "Safehouse"/"Tactical Safehouse" are user-facing names. | **PENDING** |
-| Q3 | Per-outpost accrual breakdown in UI: Option A or B? | §5.5. Recommendation: B. | **PENDING** |
+| Q1 | Can 42 submit actions to AORDF, or must users go to AORDF to launch attacks? | §5.3. Determines whether attack/defend buttons stay in 42 or get removed. | **DEFERRED** — buttons stay as connectors for now; decision later |
+| Q2 | Do pre-existing faction HQ outposts exist in the real system? | §2.5. If yes, need a user-facing name (since "FULL" is banned). If no, every outpost is user-placed. | **PENDING** |
 
 ### Resolved questions
 
 | # | Question | Resolution |
 |---|---|---|
-| ~~Q1~~ | ~~Does the node-running gate apply to FULL outposts?~~ | Confirmed: faction anchors (currently `FULL` type) are **not user-placeable** — only Safehouse and Tactical Safehouse are. Needs new user-facing name (now Q2 above). |
+| ~~Q1~~ | ~~Does the node-running gate apply to FULL outposts?~~ | Confirmed: faction anchors (currently `FULL` type) are **not user-placeable** — only Safehouse and Tactical Safehouse are. |
 | ~~Q2~~ | ~~Sol cycle default cadence: 24h or 7d?~~ | **24h** locked. §3. |
 | ~~Q3~~ | ~~What's in "other items" of the VOTC formula?~~ | Reframed: AORDF owns the full formula; 42 doesn't enumerate inputs. §5.2. |
 | ~~Q4~~ | ~~Formula public or opaque?~~ | **Public through AORDF**, not 42. §5.2. |
+| ~~Q5~~ | ~~Per-outpost accrual breakdown in UI: Option A or B?~~ | **Option B** locked (lock 23). §5.5. |
 
 ---
 

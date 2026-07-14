@@ -1190,3 +1190,34 @@ Stage Summary:
 - Key architectural clarification captured: AORDF is the game, 42 is a viewer + cycle declarer. This changes the implementation approach — 42's frontend pulls from AORDF rather than running its own game logic.
 - The install-vs-activate distinction is locked: placement is the activation step, not a separate "start" command. This affects the placement gate (device must have software installed but not yet activated, not "currently running").
 - 3 pending questions remain before implementation can begin: (Q1) can 42 submit actions to AORDF or is it read-only, (Q2) what to call faction-anchor outposts, (Q3) Option A or B for earnings display.
+
+---
+Task ID: SPEC-3
+Agent: Z.ai Code (main session)
+Task: Resolve 2 of 3 pending questions; capture 4 new locks from user's terminology/ownership/naming requirements.
+
+Work Log:
+- Read user's 3 answers:
+  1. Q1 (42 submitting actions to AORDF): deferred — leave the attack/defend connectors in the UI, decide later.
+  2. Q2 (faction anchor naming): user asked "what is an anchor?" — didn't recognize the term. Also added new requirements: users name their own safehouses at placement; user handle on preview card visible only during successful sabotage (detail deferred); reinforced NO "node"/"full" terminology in frontend OR backend (not just frontend).
+  3. Q3 (Option A/B for earnings display): Option B confirmed.
+- Explained what "anchor" meant: the pre-existing faction HQ outposts in the mock seed data (Fang Prime, Hammer Forge, etc.) coded as type:"FULL". User didn't recognize the concept, so the existence of faction HQs in the real system is now a pending question.
+- Clarified ownership model: wallet owns the outpost, faction is allegiance (not ownership). Faction doesn't own outposts; users do.
+- Updated docs/BACKEND_INTEGRATION_SPEC.md:
+  - §2.5 rewritten: "Faction HQ outposts (PENDING — do they exist?)" — explains the concept, asks if they exist in real system
+  - §2.6 new: Ownership model (wallet owns, faction = allegiance)
+  - §2.7 new: User-named outposts (name field becomes user-provided at placement)
+  - §2.8 new: Sabotage attribution (ownerName on preview card, only during successful sabotage, detail deferred)
+  - §5.4 data model: added Outpost.name (user-provided), Outpost.ownerName (new), Outpost.ownerWallet (new), OutpostType enum change (remove "FULL"), per-outpost accrual breakdown (Option B)
+  - §5.5: Option B confirmed with rationale
+  - Lock list: added locks 20-23 (user-named outposts, sabotage attribution, no node/full terminology in frontend+backend, Option B display)
+  - Open questions: Q1 → DEFERRED; Q2 → re-asked (do faction HQs exist?); Q3 → resolved (Option B)
+- NO CODE CHANGED — spec update only.
+
+Stage Summary:
+- Spec now has 23 confirmed locks + 1 deferred question + 1 pending question.
+- Major terminology lock reinforced: no "node" or "full" anywhere (frontend OR backend). OutpostType enum must remove "FULL" — final values depend on whether faction HQs exist (Q2).
+- New data model fields: Outpost.ownerName (sabotage attribution), Outpost.ownerWallet (ownership verification). Outpost.name becomes user-provided at placement.
+- Ownership clarified: wallet owns outposts, faction is allegiance.
+- 1 pending question remains: do pre-existing faction HQs exist in the real system, or is every outpost user-placed?
+- 1 deferred question: can 42 submit actions to AORDF (buttons stay as connectors for now).
