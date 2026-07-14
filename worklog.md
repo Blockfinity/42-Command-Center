@@ -1520,3 +1520,45 @@ Stage Summary:
   • /sounds/ui-button-click.mp3 → the "click" cue, every button click (AUDIO-2)
   • /sounds/bootup.mp3 → the "boot" cue, each boot-sequence line 1-10 (AUDIO-3)
 - The SFX hook's asset-backed-cue mechanism (introduced in AUDIO-2) handled AUDIO-3 with only a 1-line CUES change + the final-line suppression in boot-screen. No new infrastructure needed.
+
+---
+Task ID: AUDIO-3-FIX
+Agent: Z.ai Code (main session)
+Task: Fix choppy boot chimes — each chime should be individual and overlap cleanly, not get cut off.
+
+Root cause:
+- AUDIO-3 backed the 'boot' cue with /sounds/bootup.mp3 using the CACHED HTMLAudioElement path (the same path used for the 'click' cue in AUDIO-2).
+- That path caches ONE Audio element per URL and rewinds it (currentTime = 0) on every play() — correct for UI clicks (restart behavior), but wrong for the boot sequence.
+- The boot sequence prints a line every 240ms (LINE_INTERVAL), but bootup.mp3 is 1.3s long. So each new line rewound the single shared element at 240ms, cutting off the previous chime before it could play through → choppy, and the user never heard the full sound.
+
+Fix:
+- Added a SECOND playback path in use-sfx.ts backed by Web Audio AudioBuffer, opt-in via a new `overlap?: boolean` flag on CUES entries.
+  • preloadBuffer(url): fetch + decodeAudioData once per URL → in-memory AudioBuffer (module-level _bufferCache). Idempotent, async.
+  • playBuffer(url, opts): each call creates a FRESH AudioBufferSourceNode + GainNode, connects to destination, starts. Source nodes are one-shot — they auto-stop after the buffer ends and are GC'd. No cleanup needed. Multiple simultaneous source nodes overlap cleanly.
+  • playAsset(url, { overlap: true }) tries playBuffer first; falls back to the cached HTMLAudioElement path if the buffer isn't decoded yet (graceful degradation).
+- Set the 'boot' cue to `overlap: true`. The 'click' cue stays `overlap: false` (default) — restart behavior is correct for rapid UI clicks.
+- Prewarm useEffect now also calls preloadBuffer for overlap cues, so the one-shot source-node path is ready by the time the user clicks ESTABLISH UPLINK.
+- The link-established.mp3 stinger (AUDIO-1) is unaffected — it calls playAsset without overlap, uses the HTMLAudioElement path (fine for a one-shot stinger).
+
+Self-verification (agent-browser + AudioContext probe):
+- Installed a probe that patches AudioContext.prototype.createBufferSource to count source nodes created + track peak simultaneous + active count.
+- Clicked ESTABLISH UPLINK, waited for the full 11-line boot sequence.
+- Probe results:
+  • totalCreated: 10 — exactly 10 source nodes (one per boot line 1-10; line 11 suppressed as designed in AUDIO-3).
+  • peakActive: 6 — at peak, 6 chimes were playing SIMULTANEOUSLY (true overlap, not 1-at-a-time).
+  • activeSourcesNow: 3 — 3 chimes still tailing off after the sequence ended (each plays to full 1.3s completion, no cut-offs).
+  • createdAtMs intervals: ~244ms each — matches the 240ms LINE_INTERVAL.
+- Dashboard loaded cleanly (title "42 // COMMAND DECK", map region present). No console/runtime errors.
+
+Lint + push:
+- bun run lint → 0 errors, 0 warnings.
+- Committed as 0ca3ce6 "fix(audio): make boot chimes individual + overlapping (no more choppy)" (1 file: +111/-23).
+- Pushed to origin/main.
+
+Stage Summary:
+- Boot chimes are now individual instances that overlap cleanly. Each of the 10 boot lines plays its own full 1.3s chime, and up to 6 overlap at peak — no more choppiness.
+- The fix is generic: any future cue can opt into overlap behavior by setting `overlap: true` on its CUES entry. The click cue correctly remains in restart (rewind) mode.
+- Two complementary playback paths now exist in useSfx:
+  1. Cached HTMLAudioElement (rewind + replay) — for restart-style cues (click).
+  2. Decoded AudioBuffer + one-shot source nodes — for overlap cues (boot).
+- The link-established stinger and UI button click sounds are unchanged and still work.
