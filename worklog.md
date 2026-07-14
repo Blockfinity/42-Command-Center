@@ -1140,3 +1140,24 @@ Stage Summary:
 - Repo fully up to date on GitHub: origin/main @ a2c4c43.
 - The continuous 3D dark monochrome map (Google Earth style, SurveilTrack aesthetic, no satellite, no two-mode transition) from REBUILD-1 is live on the remote.
 - No code changes were needed — this was a pure push of the pending worklog commit. The code rebuild was already on origin from the previous task.
+
+---
+Task ID: SPEC-1
+Agent: Z.ai Code (main session)
+Task: Review backend integration requirements (VOTC/wallet, AORDF, 42 node-client, sol cycle, token economics, device placement model) and persist the consolidated spec to the repo before any code changes.
+
+Work Log:
+- Reviewed current codebase against 7 user-supplied requirements: VOTC balances (wallet), VOTC earnings (AORDF), attacks/defenses (AORDF), discovery feed (AORDF), safehouse/tactical placement (gated on node-running), sol cycle (42-computed airdrop epoch), placement once-per-device.
+- Confirmed device model: 1 wallet → N devices; FULL node → SAFEHOUSE placement; PARTIAL node → TACTICAL placement; no node → no placement. Placement is triple-gated: wallet signature + node attestation + 42-enforced lifetime cap.
+- Locked sol cycle as hybrid cadence (target 24h + 42-declared close). Name "Sol cycle" confirmed. Field rename: GameState.sol → solCycle (cycle ID, not tick counter). Mock increment in logic.ts:432 to be deleted.
+- Locked token economics: attacks cost target faction's token; defenses cost own faction's token; all pricing live via AORDF quote. No BP equivalent — Outpost.buildPoints removed everywhere. Static MISSION_META.*.cost numbers replaced by live AORDF quote { token, amount }.
+- Locked VOTC accrual model: AORDF is sole calculator; inputs = uptime (from node client) + health (from AORDF) + other items (PENDING user confirmation). logic.ts:341 accrual line deleted. Outpost.uptime becomes display cache of AORDF-reported value, not engine-incremented.
+- Cataloged every BP reference in the codebase (17 files): types.ts, 6 game-engine files, right-panel.tsx, outpost-detail-card.tsx, 2 api/ai routes. Mapped each to its replacement.
+- Identified 5 open questions requiring user confirmation before implementation: FULL outpost placement gate, sol cycle cadence (24h vs 7d), "other items" in VOTC formula, formula public/opaque, per-outpost accrual display Option A/B.
+- Created docs/BACKEND_INTEGRATION_SPEC.md (single source of truth for the backend integration): source-of-truth map, device/placement model, sol cycle spec, token economics with full code-change mapping, VOTC accrual model, source adapter architecture split, consolidated 15-lock list, 5 pending questions, 10-step implementation order.
+- NO CODE CHANGED — this task was review + spec persistence only. Implementation awaits user confirmation of the 5 pending questions.
+
+Stage Summary:
+- docs/BACKEND_INTEGRATION_SPEC.md is now the canonical reference for connecting the frontend to the real backend (Wallet, AORDF, 42). All 15 confirmed locks are recorded with their code-change implications; 5 open questions are flagged for user confirmation.
+- The spec supersedes the mock mini-services/game-engine behavior wherever they conflict (BP removal, sol-cycle semantics, VOTC accrual ownership, placement gating).
+- Next step: user resolves the 5 pending questions, then implementation proceeds in the 10-step order documented in §8 of the spec.
