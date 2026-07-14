@@ -844,3 +844,173 @@ Stage Summary:
 - The modular map platform now has 6 layers: roads, buildings, territory, activity-pings, missions, outposts
 - Cost at scale: MapTiler free tier (100K loads/mo) for dev → self-hosted PMTiles (~$5/mo fixed) for production → Esri satellite ($0) always available as fallback
 - Ready for next steps: push to GitHub, then 42 backend mounting or QA/testing task
+Task ID: PUSH-1
+Agent: main (Z.ai Code)
+Task: Push local working tree to https://github.com/Blockfinity/42-Command-Center (origin/main). User reported "preview is using the wrong old map."
+
+Work Log:
+- Discovered local `main` and remote `origin/main` had DIVERGED with no common ancestor.
+- Diffed both `world-map.tsx`: local = 568-line simpler restoration; remote = 1136-line "definitive 1:1 satellite Earth globe" (clustering + territories + activity pings + production scaling notes).
+- Diffed all files: remote was a strict superset. Remote had MORE complete types.ts (Territory, ActivityPing, networkLoad, totalActions, SAFEHOUSE), MORE complete game-engine (894 lines vs 571), MORE complete worklog (760 lines vs 367), and remote-only files (PLATFORM-REPORT.*, .githooks/, RESTORE.sh).
+- Local had 30+ junk files tracked (tool-results/, upload/*.bundle, upload/*.tar.gz, db/custom.db, .zscripts/dev.pid) — none pushed.
+- Only worthwhile local-only file: public/logo.svg.
+- Created insurance branch `wip-local-backup` at local tip (a6dc37e).
+- `git reset --hard origin/main` — local now on definitive version (d85c616).
+- Restored public/logo.svg from backup.
+- Appended defensive .gitignore entries: /tool-results/, *.pid, upload/*.bundle, upload/*.tar.gz.
+- Committed (33cca45) + pushed to origin/main (fast-forward, no force).
+- Verified: lint clean, dev server :200, game engine :3003 healthy, /api/state returns 16 outposts + 12 territories + 24 activity pings + networkLoad 2.1M + totalActions 1.08B, 34 Esri satellite tile requests, MapLibre canvas present, VLM confirms "REAL SATELLITE EARTH image (photographic, with visible continents/oceans)" — NOT the old dot-matrix.
+
+Stage Summary:
+- Push complete: origin/main @ 33cca45 (fast-forward from d85c616).
+- "Wrong old map" issue RESOLVED — local preview now shows the definitive 1136-line satellite Earth globe.
+- No force-push, no data loss, no junk committed.
+- Insurance branch `wip-local-backup` retained locally at a6dc37e.
+- GitHub PAT saved to ~/.git-credentials (0600) via credential.helper store for future pushes.
+
+---
+Task ID: BOOT-1
+Agent: main (Z.ai Code)
+Task: Improve the uplink/boot screen loading visualization — add terminal-style narrative ("Synchronizing with VirtuCorp servers", "Requesting AORDF..."), fix progress bar that stops at 88%, fix sound not playing on boot.
+
+Work Log:
+- Diagnosed two bugs in boot-screen.tsx:
+  (1) Progress bar CSS keyframe `boot-bar-fill` was defined as `0% → width:88%` with comment "holds at 88% to convey handshake in progress" — read as broken, not intentional.
+  (2) Sound on click was a single 60ms `key` blip (880Hz square) — too short/thin to be perceptible. No sound during boot sequence itself.
+- Added two new SFX cues to use-sfx.ts:
+  • `boot` — 180Hz, 0.04s square wave (deep terminal tick, one per UPLINK line)
+  • `powerOn` — 160→880Hz triangle sweep over 0.6s with custom envelope (quiet build → peak at 85% → quick cutoff). Feels like a proper "system online" moment.
+- Rewrote boot-screen.tsx with a two-phase terminal boot sequence:
+  • Phase 1 (BOOT, silent, pre-click, ~1.6s): 6 firmware/hardware init lines
+    ("VIRTUCORP SECURE TERMINAL", "Booting operative firmware [OK]", "ARIA cognitive core [READY]", etc.)
+  • Phase 2 (UPLINK, with sound, post-click, ~1.8s): 7 VirtuCorp/AORDF handshake lines
+    ("Requesting AORDF authentication token [GRANTED]", "Synchronizing with VirtuCorp servers [SYNCED]",
+     "Faction state sync · FANG ▸ HAMMER ▸ RESOLUTE [OK]", "UPLINK ESTABLISHED", etc.)
+  • Progress bar now JS-driven (lines.length / TOTAL_LINES × 100) — actually reaches 100%.
+  • Percentage counter (000%→100%) displayed next to bar.
+  • Terminal pane: CRT-style frame with scanline overlay, inner glow, auto-scroll, blinking cursor.
+  • Button: disabled during BOOT ("INITIALIZING..."), active during ready ("ESTABLISH UPLINK"),
+    disabled during UPLINK ("ESTABLISHING UPLINK..."), final ("UPLINK ESTABLISHED").
+  • onConnect() delayed until UPLINK sequence completes (350ms after powerOn sweep starts)
+    so the user gets the full cinematic before the deck loads.
+- Fixed React Strict Mode issue: original setInterval approach caused duplicated/skipped lines.
+  Rewrote with counter + setTimeout-per-render pattern (each render schedules exactly one timeout,
+  React cleanup cancels it on state change — immune to double-invocation).
+- Fixed ref dependency issue: useSfx returns a new object literal each render, causing effect
+  cleanup to cancel the onConnect timeout. Used refs (sfxRef, onConnectRef) updated in useEffect
+  with no deps, and removed sfx/onConnect from effect dep arrays.
+- Updated globals.css: removed `@keyframes boot-bar-fill` (88% cap) + `.boot-bar-fill` classes.
+  Added `.boot-terminal` (CRT scanlines + inner glow), `@keyframes boot-line-in` (fade+slide),
+  `@keyframes boot-cursor-blink` (hard on/off steps).
+- Updated command-deck.tsx: removed redundant `sfx.play("key")` in handleConnect (BootScreen
+  now owns all click/boot sound — transition cue on click, boot ticks per line, powerOn sweep).
+- Verified via Agent Browser + VLM:
+  • BOOT phase: all 6 lines render correctly (no dups/skips), bar at 46%, button "ESTABLISH UPLINK", blinking cursor visible.
+  • UPLINK phase: all 7 lines render (VLM confirmed "Synchronizing with VirtuCorp servers [SYNCED]" etc.), bar reaches 100%, button transitions through "ESTABLISHING UPLINK..." → "UPLINK ESTABLISHED".
+  • Command deck loads after onConnect delay: MapLibre canvas present, satellite Earth globe visible, nav rail functional.
+  • Lint clean, no console errors.
+
+Stage Summary:
+- Boot screen now has a cinematic terminal boot sequence with VirtuCorp/AORDF narrative.
+- Progress bar fills 0→100% (was stuck at 88%).
+- Sound: deep "boot" tick per UPLINK line + "transition" sweep on click + "powerOn" rising sweep on completion (was a single inaudible 60ms blip).
+- Two-phase design: BOOT (silent, pre-click) → UPLINK (with sound, post-click) → command deck.
+
+---
+Task ID: BOOT-2
+Agent: main (Z.ai Code)
+Task: Hide the terminal box + progress bar until the operative clicks "ESTABLISH UPLINK" (previously they appeared during a silent pre-click BOOT phase).
+
+Work Log:
+- Restructured boot-screen.tsx from a two-phase (BOOT pre-click / UPLINK post-click)
+  design into a single post-click sequence:
+  • IDLE (pre-click): only the "42" title, subtitle, and "ESTABLISH UPLINK"
+    button are rendered. Button is enabled immediately (no "INITIALIZING..."
+    gate). Terminal box + progress bar are NOT in the DOM.
+  • CONNECTING (post-click): the terminal box + progress bar fade in via a new
+    `.boot-panel-in` animation (0.28s ease-out, fade + 6px lift), then the full
+    11-line boot sequence streams line-by-line (240ms/line) with a deep "boot"
+    tick per line. Bar fills 0 → 100% as lines print.
+  • DONE: powerOn rising sweep plays, button flips to "UPLINK ESTABLISHED",
+    then onConnect() fires after 420ms so the parent loads the command deck.
+- Merged the old BOOT_LINES (6 firmware lines) + UPLINK_LINES (7 handshake
+  lines) into a single BOOT_SEQUENCE (11 lines) that all play post-click.
+  Curated order: firmware init → AORDF/VirtuCorp handshake → UPLINK ESTABLISHED.
+- Fixed a critical React effect-cleanup bug introduced in the first pass:
+  the done-effect called setPhase("done"), which changed `phase` (in the
+  effect's dep array). React then re-ran the effect, whose cleanup cleared
+  the onConnect setTimeout — so onConnect never fired and the deck never
+  loaded (screen stuck on "UPLINK ESTABLISHED").
+  Fix: keep `phase` as "connecting" through completion; use a separate `done`
+  boolean for the done visual state (mirrors the original BOOT-1 pattern).
+  Since setDone(true) doesn't change phase or lineCount, the effect deps
+  don't change → cleanup doesn't fire → onConnect timeout survives.
+- Added `.boot-panel-in` keyframe + class to globals.css (fade + translateY).
+- Updated all `phase === "done"` references → `done` boolean (button label,
+  last-line highlight, cursor visibility).
+- Verified via Agent Browser + VLM:
+  • IDLE: VLM confirms "No terminal/log box or progress bar is visible" —
+    only 42 title, subtitle, ESTABLISH UPLINK button, faction wallpaper.
+  • Mid-sequence (~900ms): terminal box + bar visible, bar at 45%, lines
+    streaming (VIRTUCORP SECURE TERMINAL, Booting operative firmware, etc.).
+  • End (~2.7s): VLM confirms bar at 100%, terminal shows "UPLINK ESTABLISHED",
+    button shows "UPLINK ESTABLISHED".
+  • Post-transition: command deck loads — satellite Earth globe visible,
+    nav rail (Orbital Map, Discovery Feed, Strike Console, ...), status
+    panels (ACTIVE NODES, THREAT LEVEL RED, etc.), GET /api/state 200.
+  • No console errors, no runtime errors, lint clean.
+
+Stage Summary:
+- Terminal box + progress bar now hidden until "ESTABLISH UPLINK" is clicked.
+- Button is immediately clickable (no disabled "INITIALIZING..." phase).
+- Bar still fills 0 → 100% (fixed in BOOT-1), sound still works (fixed in BOOT-1).
+- Full cinematic flow: idle (clean) → click → panel reveal + streaming lines +
+  ticks → 100% + powerOn sweep → command deck.
+
+---
+Task ID: MAP-1
+Agent: main (Z.ai Code)
+Task: When the operative clicks on empty map area (outside any outpost/cluster), the world globe should reset its position and axis (center, zoom, bearing, pitch) back to the boot camera.
+
+Work Log:
+- Added `initialCameraRef` to world-map.tsx — stores the home camera (center,
+  zoom=1.6, bearing=0, pitch=0) computed once at map init from the operative's
+  FULL outpost (fallback [-32, 8]). Refs let the click handler (registered
+  once inside the init effect) always read the same home view without
+  re-binding.
+- Refactored map init to extract INITIAL_ZOOM / INITIAL_BEARING / INITIAL_PITCH
+  constants (used both in the Map constructor and in the ref) so the reset
+  target is always in sync with the boot camera.
+- Rewrote the generic `map.on("click")` handler (previously only active in
+  placement mode):
+  • Queries queryRenderedFeatures at the click point for outpost/cluster layers.
+    If any feature is hit, returns early (layer-specific handlers already
+    called preventDefault, but this is a belt-and-suspenders guard).
+  • Placement mode → forwards clicked coord to parent (unchanged behavior).
+  • Empty-ocean click (not placing) → reset: set lastInteractRef (pauses
+    auto-rotate for 3.5s), deselect any outpost (onSelect(null)), then
+    easeTo the home camera over 900ms.
+- Diagnosed a critical MapLibre quirk during testing: calling `map.stop()`
+  immediately before `map.easeTo()` in the same synchronous tick PREVENTS the
+  ease from starting. Verified via direct eval: `stop(); easeTo();` → no
+  animation; `easeTo();` alone → works. Removed the `map.stop()` call. The
+  `lastInteractRef = now` is sufficient to pause the auto-rotate loop (which
+  uses per-frame jumpTo that would otherwise cancel the easeTo) for the
+  900ms duration.
+- Verified via Agent Browser with REAL user interactions (not eval-injected
+  camera changes):
+  • Boot → deck loads at home (z=1.6, b=0, p=0, c=[-74,40.71]).
+  • Drag-pan (left-drag), scroll-zoom in, drag-rotate (right-drag) → camera
+    heavily altered (z=0.64, b=-166, p=60, c=[-145.9,67.08]).
+  • Click empty ocean → eases back to home (z=1.6, b=0, p=0, c=[-74,40.71]).
+  • Confirmed reliable across multiple full-reload runs.
+  • No console errors, no runtime errors, lint clean.
+
+Stage Summary:
+- Clicking empty map area (outside outposts/clusters) now resets the globe to
+  its boot position + axis (center, zoom, bearing, pitch) via a 900ms ease.
+- Clicking an outpost/cluster still selects/zooms (layer handlers intercept
+  via preventDefault; queryRenderedFeatures is a backup guard).
+- Placement mode (Deploy Outpost) still forwards the clicked coord — unchanged.
+- Key gotcha documented inline: do NOT call map.stop() before easeTo in the
+  same tick (MapLibre quirk prevents the ease from starting).
