@@ -1443,3 +1443,41 @@ Stage Summary:
 - Audio autoplay policy is satisfied: playback is triggered inside the done-effect, which only runs after the user clicked "ESTABLISH UPLINK" (a user gesture).
 - The stinger respects the existing mute toggle in useSfx (sfx.toggle()).
 - The synthesized "powerOn" oscillator sweep is no longer used at boot — the real recorded stinger replaces it.
+
+---
+Task ID: AUDIO-2
+Agent: Z.ai Code (main session)
+Task: Use the uploaded "UI button click.mp3" when a user clicks on something.
+
+Work Log:
+- Verified uploaded file: /home/z/my-project/upload/UI button click.mp3 (MPEG ADTS layer III, 256 kbps, 44.1 kHz, Monaural, 49KB).
+- Surveyed existing click-related SFX usage: the synthesized "click" cue is already wired into the canonical button-click call sites:
+  • status-bar.tsx (mute toggle button)
+  • command-deck.tsx (main CTA handleClick + handleGarrisonSelect)
+  The cleanest, non-over-scoping approach: back the existing "click" CUE with the real asset. This automatically covers every sfx.play("click") call site without touching any component.
+- Copied MP3 to public/sounds/ui-button-click.mp3 (kebab-case, served as a static asset alongside link-established.mp3).
+- Extended the CUES record in use-sfx.ts with two optional fields: `asset?: string` and `assetVolume?: number`. When a cue has `asset` set, playCue() plays the real file via playAsset() instead of synthesizing an oscillator.
+- Set the "click" cue: { ..., asset: "/sounds/ui-button-click.mp3", assetVolume: 0.55 }. Volume 0.55 keeps the click present but not intrusive (the synthesized click peaked at gain 0.12, so 0.55 is a reasonable audible-but-subtle level for a real asset).
+- Refactored playAsset to cache Audio elements per URL in a module-level Map (_assetCache). Previously (AUDIO-1) it allocated a new Audio() per call — fine for the one-shot boot stinger, but a UI button click fires repeatedly and needs instant replay. The cache means rapid re-clicks rewind (currentTime=0) + replay the same element with zero allocation.
+- Extracted getOrCreateAsset(url) + prewarmAsset(url) helpers from playAsset.
+- Added a prewarm useEffect in useSfx: on mount, creates + fetches (preload="auto") every asset-backed cue so the FIRST click is latency-free. Runs once; idempotent via the cache.
+- Asset-backed cue dispatch is now the first branch in playCue() (before the powerOn special-case and the oscillator fallback), so any future cue can be flipped from synthesized to real by just adding an `asset` field.
+- The boot stinger (AUDIO-1) still works — it calls playAsset("/sounds/link-established.mp3") directly, which now also uses the cache (harmless for a one-shot).
+
+Self-verification (agent-browser):
+- Opened http://localhost:3000 → boot screen → clicked "ESTABLISH UPLINK" → boot sequence streamed → dashboard loaded cleanly. ✅
+- On dashboard mount, the prewarm fired: GET /sounds/ui-button-click.mp3 → 206 Partial Content (Media). Single fetch — element cached. ✅
+- Clicked the SFX (mute toggle) button @e11 three times + a nav button @e3: all completed with no new network requests (cached element replayed instantly) and zero console/runtime errors. ✅
+- agent-browser errors → none. agent-browser console → only React DevTools info + HMR connected. ✅
+
+Lint + push:
+- bun run lint → 0 errors, 0 warnings.
+- Committed as d0dbc7d "feat(audio): use 'UI button click' asset for the click cue" (2 files: +77/-10 + new MP3).
+- Pushed to origin/main.
+
+Stage Summary:
+- The uploaded "UI button click.mp3" now plays whenever a user clicks a button that calls sfx.play("click") — currently the mute toggle, the main CTA, and garrison selection.
+- The SFX hook now supports asset-backed named cues generically: any cue can be flipped from synthesized oscillator to a real audio file by adding an `asset` field to its CUES entry. No component changes needed.
+- Audio elements are cached per URL and prewarmed on mount, so clicks are instant (no first-click latency).
+- The same mute flag governs both oscillator cues and asset-backed cues, so muting silences everything consistently.
+- The boot "link established" stinger (AUDIO-1) continues to work unchanged.
