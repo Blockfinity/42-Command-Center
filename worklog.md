@@ -1405,3 +1405,41 @@ Stage Summary:
 - The top-level "Outpost" concept (Outpost 33 FANG, etc.) and `factions.ts` (FACTION_OUTPOST_NUMBER, outpostNumber, outpostNumberStr) remain untouched, as required.
 - Repo is in a clean, lint-passing, runtime-healthy state on origin/main.
 - Ready for the next phase of backend integration (architectural foundation / source adapter layer / BP removal) when the user gives the go-ahead.
+
+---
+Task ID: AUDIO-1
+Agent: Z.ai Code (main session)
+Task: Wire the uploaded "link established.mp3" to play when the uplink is established and the dashboard boots up.
+
+Work Log:
+- Verified uploaded file: /home/z/my-project/upload/link established.mp3 (MPEG ADTS layer III, 256 kbps, 44.1 kHz, JntStereo).
+- Located the exact trigger point: src/components/command/boot-screen.tsx "DONE" effect — fires when the last boot line ("▸ UPLINK ESTABLISHED") prints, right before onConnect() transitions to the command deck. This is precisely "when the uplink is established and the dashboard boots up."
+- Discovered existing SFX infrastructure: src/hooks/use-sfx.ts (oscillator-based, no asset files). It had a synthesized "powerOn" rising-sweep cue playing at the done moment. Confirmed via grep that "powerOn" was ONLY used in boot-screen.tsx — safe to replace with the real asset.
+- Copied MP3 to public/sounds/link-established.mp3 (normalized filename: no spaces, kebab-case) so Next.js serves it as a static asset.
+- Extended useSfx hook with a new playAsset(url, opts?) method:
+  • Uses HTMLAudioElement (new Audio(url)) for real asset playback.
+  • Respects the existing module-level _muted flag (consistent with oscillator cues).
+  • Resumes the shared AudioContext if suspended (so the asset is audible after the user gesture — browsers block autoplay until a gesture).
+  • Best-effort play() — swallows the promise rejection if the browser still blocks autoplay.
+  • Added to SfxApi interface + returned from the hook.
+- Replaced the synthesized sfx.play("powerOn") call in boot-screen's done-effect with sfx.playAsset("/sounds/link-established.mp3", { volume: 0.85 }).
+- Updated boot-screen comments to reference the new stinger instead of the powerOn sweep.
+- Kept the "powerOn" cue DEFINED in the hook (harmless, available for future use) but it's no longer called anywhere.
+
+Self-verification (agent-browser):
+- Opened http://localhost:3000 → boot screen rendered with "▶ ESTABLISH UPLINK" button. ✅
+- Clicked the button → boot sequence streamed line-by-line (11 lines × 240ms ≈ 2.6s). ✅
+- After the sequence completed, the browser issued: GET /sounds/link-established.mp3 → 206 Partial Content (Media). ✅ (206 = the Audio element requested a byte range, server streamed it — playback started.)
+- Page transitioned cleanly to the command deck (title "42 // COMMAND DECK", URL /). ✅
+- agent-browser errors → none. agent-browser console → only the React DevTools info + HMR connected. No runtime/console errors. ✅
+
+Lint + push:
+- bun run lint → 0 errors, 0 warnings.
+- Committed as babc41a "feat(audio): play 'link established' stinger on uplink-established + dashboard boot" (3 files: +46/-7 + new MP3).
+- Pushed to origin/main (26f5bb3..babc41a).
+
+Stage Summary:
+- The "link established" cinematic stinger now plays at the exact uplink-established moment (when the boot terminal prints "▸ UPLINK ESTABLISHED" and the button flips to "UPLINK ESTABLISHED"), continuing over the dashboard boot-up transition.
+- Audio autoplay policy is satisfied: playback is triggered inside the done-effect, which only runs after the user clicked "ESTABLISH UPLINK" (a user gesture).
+- The stinger respects the existing mute toggle in useSfx (sfx.toggle()).
+- The synthesized "powerOn" oscillator sweep is no longer used at boot — the real recorded stinger replaces it.
