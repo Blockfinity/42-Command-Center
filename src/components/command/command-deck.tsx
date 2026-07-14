@@ -28,7 +28,6 @@ export function CommandDeck() {
   const connected = useCommand((s) => s.connected);
   const selectedId = useCommand((s) => s.selectedOutpostId);
   const select = useCommand((s) => s.selectOutpost);
-  const groundView = useCommand((s) => s.groundView);
   const pending = useCommand((s) => s.pendingMission);
   const setPending = useCommand((s) => s.setPendingMission);
   const placement = useCommand((s) => s.placementMode);
@@ -239,15 +238,11 @@ export function CommandDeck() {
               </>
             )}
 
-            {/* Outpost detail card — free-floating quick view for any selected outpost.
-                Hidden in ground view (zoom ≥ 12) where the UnitInfoPanel takes over
-                to avoid overlap/duplication. */}
-            {!groundView && (
-              <OutpostDetailCard
-                outpost={selectedOutpost}
-                onClose={() => select(null)}
-              />
-            )}
+            {/* Outpost detail card — free-floating quick view for any selected outpost. */}
+            <OutpostDetailCard
+              outpost={selectedOutpost}
+              onClose={() => select(null)}
+            />
           </main>
 
           {/* HUD overlays — floating over the canvas, no bars */}

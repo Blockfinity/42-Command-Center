@@ -122,14 +122,13 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         const intr = interactionRef.current;
         map.getCanvas().style.cursor = intr.placementMode ? "crosshair" : "grab";
       };
-      // Outpost hover → pointer (both globe-tier and street-tier marker layers)
+      // Outpost hover → pointer (all outpost marker layers)
       [
-        "outpost-shape",
-        "outpost-health-ring",
+        "outpost-square",
+        "outpost-code",
+        "outpost-select",
+        "outpost-hitbox",
         "outpost-clusters",
-        "outpost-street-square",
-        "outpost-street-code",
-        "outpost-street-select",
       ].forEach((layerId) => {
         if (map.getLayer(layerId)) {
           map.on("mouseenter", layerId, setPointer);
@@ -155,7 +154,7 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         if (rafId !== null) cancelAnimationFrame(rafId);
         map.off("click", onClick);
         map.off("move", onMove);
-        ["outpost-shape", "outpost-health-ring", "outpost-clusters", "outpost-street-square", "outpost-street-code", "outpost-street-select"].forEach((layerId) => {
+        ["outpost-square", "outpost-code", "outpost-select", "outpost-hitbox", "outpost-clusters"].forEach((layerId) => {
           if (map.getLayer(layerId)) {
             map.off("mouseenter", layerId, setPointer);
             map.off("mouseleave", layerId, setGrab);
