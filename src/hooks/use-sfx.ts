@@ -67,7 +67,11 @@ const CUES: Record<
   select: { freq: 520, dur: 0.05, type: "square" },
   transition: { freq: 420, dur: 0.1, type: "triangle", sweep: 1.8 },
   place: { freq: 300, dur: 0.14, type: "triangle", sweep: 2.2 },
-  boot: { freq: 180, dur: 0.04, type: "square" },
+  // Boot sequence tick — backed by the real recorded asset, played once per
+  // boot line as it prints (except the final "UPLINK ESTABLISHED" line,
+  // which is covered by the link-established.mp3 stinger; the boot-screen
+  // component suppresses the cue for that last line).
+  boot: { freq: 180, dur: 0.04, type: "square", asset: "/sounds/bootup.mp3", assetVolume: 0.5 },
   powerOn: { freq: 160, dur: 0.6, type: "triangle", sweep: 5.5 },
 };
 

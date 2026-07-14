@@ -23,8 +23,10 @@ const FACTION_WALLPAPER: Record<FactionId, string> = {
 //     "INITIALIZING..." gate).
 //
 //   • CONNECTING (post-click) — the terminal box + progress bar fade in,
-//     then the full boot sequence streams line-by-line. Each line plays a
-//     deep "boot" tick. The bar fills 0 → 100% as lines print.
+//     then the full boot sequence streams line-by-line. Each line plays the
+//     recorded "boot" tick (/sounds/bootup.mp3) — EXCEPT the final line,
+//     which is covered by the "link established" stinger. The bar fills
+//     0 → 100% as lines print.
 //
 //   • DONE — when the last line prints, the "link established" cinematic
 //     stinger (/sounds/link-established.mp3) plays, the button flips to
@@ -85,11 +87,16 @@ export function BootScreen({
   React.useEffect(() => { onConnectRef.current = onConnect; });
 
   // ── Stream boot lines one-by-one with a tick per line ──────────────────
+  // The boot cue (/sounds/bootup.mp3) plays for every line EXCEPT the last —
+  // the final "▸ UPLINK ESTABLISHED" line is covered by the link-established
+  // stinger in the done-effect below, so we suppress the tick here when the
+  // line about to print is the final one.
   React.useEffect(() => {
     if (phase !== "connecting" || lineCount >= TOTAL_LINES) return;
+    const isFinalLine = lineCount + 1 >= TOTAL_LINES;
     const timer = setTimeout(() => {
       setLineCount((c) => c + 1);
-      sfxRef.current.play("boot");
+      if (!isFinalLine) sfxRef.current.play("boot");
     }, LINE_INTERVAL);
     return () => clearTimeout(timer);
   }, [phase, lineCount]);
