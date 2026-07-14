@@ -1481,3 +1481,42 @@ Stage Summary:
 - Audio elements are cached per URL and prewarmed on mount, so clicks are instant (no first-click latency).
 - The same mute flag governs both oscillator cues and asset-backed cues, so muting silences everything consistently.
 - The boot "link established" stinger (AUDIO-1) continues to work unchanged.
+
+---
+Task ID: AUDIO-3
+Agent: Z.ai Code (main session)
+Task: Use uploaded bootup.m4a for each item in the boot-up sequence after clicking "establish uplink", individually per item, except the last (already covered by the link-established stinger).
+
+Work Log:
+- Verified uploaded file: /home/z/my-project/upload/bootup.m4a (ISO Media, Apple iTunes ALAC/AAC-LC, 37KB). ffprobe confirmed actual codec = aac (AAC-LC).
+- Converted to MP3 via ffmpeg (libmp3lame, 256k) → public/sounds/bootup.mp3 (44KB, 1.3s duration). Reasons: (1) consistency with the other two sounds (link-established.mp3, ui-button-click.mp3); (2) MP3 has marginally broader browser support than M4A/AAC and avoids any ALAC ambiguity from the `file` command's label.
+- Analyzed the boot-screen line-streaming logic:
+  • BOOT_SEQUENCE has 11 lines (TOTAL_LINES = 11).
+  • The line-streaming effect fires once per lineCount value 0..10. Each fire schedules a 240ms timeout that increments lineCount AND plays the "boot" cue.
+  • When lineCount goes 10→11, that's the final line ("▸ UPLINK ESTABLISHED") printing — and the "boot" cue was being played for it too.
+  • The done-effect then fires (lineCount >= TOTAL_LINES) and plays the link-established.mp3 stinger.
+  • So at the final-line moment, BOTH boot tick + stinger were playing simultaneously.
+- Wired the asset: added `asset: "/sounds/bootup.mp3", assetVolume: 0.5` to the "boot" CUES entry in use-sfx.ts. Same mechanism as the "click" cue (AUDIO-2) — playCue() now plays the real file instead of the synthesized square-wave tick. The asset is cached + prewarmed, so the 10 rapid replays (every 240ms across lines 1-10) rewind + replay instantly from cache.
+- Suppressed the boot cue for the final line in boot-screen.tsx: added `const isFinalLine = lineCount + 1 >= TOTAL_LINES;` and `if (!isFinalLine) sfxRef.current.play("boot");` inside the line-streaming timeout. So:
+  • Lines 1-10 (lineCount 0→1 through 9→10): play bootup.mp3 individually per line.
+  • Line 11 (lineCount 10→11, "▸ UPLINK ESTABLISHED"): NO bootup.mp3 — only the link-established.mp3 stinger plays (from the done-effect).
+- Updated the boot-screen header comment to reflect the new per-line asset + the final-line suppression.
+
+Self-verification (agent-browser):
+- Opened http://localhost:3000 → boot screen → clicked "ESTABLISH UPLINK" → boot sequence streamed all 11 lines → dashboard loaded cleanly. ✅
+- Network: bootup.mp3 fetched once (206, prewarm on mount) + link-established.mp3 fetched once (206, prewarm). Both replayed from cache during the sequence — no per-line re-fetching (cached Audio elements rewound + replayed). ✅
+- agent-browser errors → none. agent-browser console → only React DevTools info + HMR connected. ✅
+
+Lint + push:
+- bun run lint → 0 errors, 0 warnings.
+- Committed as d4c11b7 "feat(audio): play 'bootup' sound for each boot-sequence line (except last)" (3 files: +15/-4 + new MP3).
+- Pushed to origin/main.
+
+Stage Summary:
+- The uploaded bootup sound now plays individually for each of the first 10 boot-sequence lines after the user clicks "ESTABLISH UPLINK".
+- The 11th and final line ("▸ UPLINK ESTABLISHED") plays only the link-established.mp3 stinger (AUDIO-1), with no simultaneous boot tick.
+- All three uploaded sounds are now integrated:
+  • /sounds/link-established.mp3 → uplink-established + dashboard boot moment (AUDIO-1)
+  • /sounds/ui-button-click.mp3 → the "click" cue, every button click (AUDIO-2)
+  • /sounds/bootup.mp3 → the "boot" cue, each boot-sequence line 1-10 (AUDIO-3)
+- The SFX hook's asset-backed-cue mechanism (introduced in AUDIO-2) handled AUDIO-3 with only a 1-line CUES change + the final-line suppression in boot-screen. No new infrastructure needed.
