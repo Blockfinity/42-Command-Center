@@ -12,6 +12,10 @@ import * as React from "react";
  * API:
  *   sfx.play(name)         — play a named cue ("key" | "click" | "confirm"
  *                            | "deny" | "select" | "transition" | "place")
+ *                            Cues may be backed by a real audio asset
+ *                            (see CUES.asset) instead of an oscillator.
+ *   sfx.playAsset(url)     — play a real audio file directly (e.g. the
+ *                            "link established" stinger). Respects mute.
  *   sfx.resume()           — resume the AudioContext (must be called after a
  *                            user gesture; browsers block autoplay)
  *   sfx.toggle()           — flip the muted flag
@@ -40,9 +44,24 @@ function ctx(): AudioContext | null {
   return _ctx;
 }
 
-const CUES: Record<CueName, { freq: number; dur: number; type?: OscillatorType; sweep?: number }> = {
+const CUES: Record<
+  CueName,
+  {
+    freq: number;
+    dur: number;
+    type?: OscillatorType;
+    sweep?: number;
+    /** If set, play this audio file instead of synthesizing an oscillator. */
+    asset?: string;
+    /** Volume for the asset-backed cue (0–1). Defaults to 0.8. */
+    assetVolume?: number;
+  }
+> = {
   key: { freq: 880, dur: 0.06, type: "square" },
-  click: { freq: 660, dur: 0.04, type: "square" },
+  // UI button click — backed by the real recorded asset so every button
+  // click sounds consistent. The oscillator params are kept only as a
+  // fallback description (unused when `asset` is set).
+  click: { freq: 660, dur: 0.04, type: "square", asset: "/sounds/ui-button-click.mp3", assetVolume: 0.55 },
   confirm: { freq: 740, dur: 0.12, type: "triangle", sweep: 1.5 },
   deny: { freq: 180, dur: 0.18, type: "sawtooth", sweep: 0.5 },
   select: { freq: 520, dur: 0.05, type: "square" },
@@ -58,8 +77,17 @@ function playCue(name: CueName) {
   if (!c) return;
   if (c.state === "suspended") c.resume().catch(() => {});
 
+  const spec = CUES[name] ?? CUES.click;
+
+  // Asset-backed cue? Play the real file instead of synthesizing.
+  if (spec.asset) {
+    playAsset(spec.asset, { volume: spec.assetVolume ?? 0.8 });
+    return;
+  }
+
   // powerOn — custom rising-sweep envelope (quiet build → peak → quick cutoff)
   // Feels like a proper "system online" moment, not a static blip.
+  // (No longer used at boot — the "link established" stinger replaced it.)
   if (name === "powerOn") {
     const t0 = c.currentTime;
     const dur = 0.6;
@@ -78,7 +106,6 @@ function playCue(name: CueName) {
     return;
   }
 
-  const spec = CUES[name] ?? CUES.click;
   const osc = c.createOscillator();
   const gain = c.createGain();
   osc.type = spec.type ?? "square";
@@ -99,11 +126,39 @@ function playCue(name: CueName) {
 }
 
 // ── Asset playback ──────────────────────────────────────────────────────
-// Plays a real audio file (e.g. the "link established" cinematic stinger)
-// via an HTMLAudioElement. Respects the same module-level `_muted` flag as
-// the oscillator cues and resumes the shared AudioContext so the asset is
-// audible after a user gesture. The element is created per-call so the same
-// asset can overlap itself if triggered rapidly; browsers GC it once it ends.
+// Plays a real audio file (e.g. the "link established" stinger, or the UI
+// button-click asset backing the `click` cue) via an HTMLAudioElement.
+// Respects the same module-level `_muted` flag as the oscillator cues and
+// resumes the shared AudioContext so the asset is audible after a user
+// gesture.
+//
+// Elements are cached per URL (module-level Map) so rapid re-triggering —
+// e.g. clicking several buttons quickly — rewinds + replays instantly
+// without allocating a new element each time. `prewarmAsset(url)` creates
+// (and starts fetching) an element without playing, so the first click is
+// latency-free.
+const _assetCache = new Map<string, HTMLAudioElement>();
+
+function getOrCreateAsset(url: string): HTMLAudioElement | null {
+  if (typeof window === "undefined") return null;
+  let el = _assetCache.get(url);
+  if (!el) {
+    try {
+      el = new Audio(url);
+      el.preload = "auto";
+      _assetCache.set(url, el);
+    } catch {
+      return null;
+    }
+  }
+  return el;
+}
+
+/** Create + fetch the asset without playing, so the first play() is instant. */
+function prewarmAsset(url: string): void {
+  getOrCreateAsset(url);
+}
+
 function playAsset(url: string, opts?: { volume?: number }): HTMLAudioElement | null {
   if (_muted) return null;
   if (typeof window === "undefined") return null;
@@ -112,10 +167,13 @@ function playAsset(url: string, opts?: { volume?: number }): HTMLAudioElement | 
   const c = ctx();
   if (c && c.state === "suspended") c.resume().catch(() => {});
 
+  const el = getOrCreateAsset(url);
+  if (!el) return null;
   try {
-    const el = new Audio(url);
     el.volume = Math.min(1, Math.max(0, opts?.volume ?? 0.8));
-    el.preload = "auto";
+    // Rewind so rapid re-clicks replay from the start instead of continuing
+    // the previous playback.
+    el.currentTime = 0;
     // best-effort: play() returns a promise that can reject if the browser
     // still considers this a non-gesture autoplay; swallow that quietly.
     const p = el.play();
@@ -158,6 +216,15 @@ export interface SfxApi {
 export function useSfx(): SfxApi {
   // re-render when muted flips so consumers see the change
   const [muted, setMuted] = React.useState(_muted);
+
+  // Prewarm every asset-backed cue (fetch without playing) so the first
+  // click on any button is latency-free. Runs once per mount; idempotent
+  // because getOrCreateAsset caches the element.
+  React.useEffect(() => {
+    for (const spec of Object.values(CUES)) {
+      if (spec.asset) prewarmAsset(spec.asset);
+    }
+  }, []);
 
   const play = React.useCallback((name: CueName) => playCue(name), []);
   const playAssetCb = React.useCallback(
