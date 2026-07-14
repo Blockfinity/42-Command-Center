@@ -1122,3 +1122,21 @@ Stage Summary:
 - The modular architecture from MAP-REBUILD-2 is intact: registry/layers.ts, registry/sources.ts, NormalizedEvent vocabulary, swappable tile-provider. The rebuild only touched the basemap + layer styling, not the architecture.
 - Cost strategy unchanged: Esri-free path removed (no satellite), MapTiler dev (vector tiles only), self-hosted PMTiles for production (~$5/mo fixed).
 - Three scalability guarantees intact: append a layer file + register, add a source adapter + register, NormalizedEvent vocabulary is the contract.
+
+---
+Task ID: UPDATE-REPO-1
+Agent: Z.ai Code (main session)
+Task: Update the repo with the latest changes (push to GitHub).
+
+Work Log:
+- Checked git state: working tree clean, 1 commit ahead of origin/main.
+- Confirmed the REBUILD-1 code changes (the 5 rebuilt map files: map-controller.ts, buildings.layer.ts, roads.layer.ts, outposts.layer.ts, map-view.tsx) were already pushed in commit 5b9033c.
+- The only unpushed commit was a2c4c43 (worklog.md update from REBUILD-1 stage summary).
+- Pushed a2c4c43 to origin/main: 5b9033c..a2c4c43 (fast-forward, no force).
+- Verified origin/main now fully matches local HEAD (## main...origin/main, no ahead/behind).
+- Confirmed all 18 map-module files present on origin/main including the 5 rebuilt files + the modular architecture (registry/, sources/, layers/, utils/, types.ts, tile-provider.ts, map-context.ts, layer-host.tsx, unit-info-panel.tsx).
+
+Stage Summary:
+- Repo fully up to date on GitHub: origin/main @ a2c4c43.
+- The continuous 3D dark monochrome map (Google Earth style, SurveilTrack aesthetic, no satellite, no two-mode transition) from REBUILD-1 is live on the remote.
+- No code changes were needed — this was a pure push of the pending worklog commit. The code rebuild was already on origin from the previous task.
