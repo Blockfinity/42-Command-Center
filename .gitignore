@@ -87,5 +87,6 @@ backups/
 # === Sandbox artifacts — never commit (defensive) ===
 /tool-results/
 *.pid
-upload/*.bundle
-upload/*.tar.gz
+# Entire upload/ folder is sandbox-only context (user-uploaded screenshots,
+# reference images, conversation exports). Never tracked in the public repo.
+/upload/
