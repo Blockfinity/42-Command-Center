@@ -2,11 +2,14 @@
 // Map controller — MapLibre initialization, camera, globe projection, and
 // the auto-rotate interaction loop.
 //
-// This is the low-level controller. It creates the MapLibre instance, sets up
-// the base style (satellite + coastlines + graticule), handles camera centering,
-// and runs the auto-rotate rAF loop that pauses on user interaction.
+// ONE CONTINUOUS 3D MAP (Google Earth style). No two-mode transition.
+// Pure dark monochrome basemap at ALL zoom levels — dark ocean fill, dark
+// water bodies, subtle country outlines at low zoom, white road lines,
+// 3D building extrusions at city zoom. Matches the SurveilTrack reference:
+// solid dark buildings, white road network, dark gray water, white square
+// markers with alphanumeric codes.
 //
-// The controller also stores the initial "home" camera and exposes resetHome()
+// The controller stores the initial "home" camera and exposes resetHome()
 // so the layer-host can implement the "click empty ocean → reset globe" feature.
 //
 // The controller does NOT know about gameplay layers or data sources — those
@@ -17,29 +20,13 @@ import maplibregl from "maplibre-gl";
 import type { FeatureCollection, Geometry, GeoJSON } from "geojson";
 import { feature } from "topojson-client";
 import worldTopo from "world-atlas/countries-10m.json";
-import { buildRasterSource, buildVectorSource } from "./tile-provider";
+import { buildVectorSource } from "./tile-provider";
 
 // ---- Static world data (computed once at module scope) ----
 const worldFeat = feature(
   worldTopo as never,
   (worldTopo as never).objects.countries,
 ) as unknown as FeatureCollection<Geometry>;
-
-function makeGraticule(step: number): GeoJSON.FeatureCollection {
-  const lines: GeoJSON.Feature[] = [];
-  for (let lng = -180; lng <= 180; lng += step) {
-    const coords: [number, number][] = [];
-    for (let lat = -85; lat <= 85; lat += 2) coords.push([lng, lat]);
-    lines.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-  }
-  for (let lat = -75; lat <= 75; lat += step) {
-    const coords: [number, number][] = [];
-    for (let lng = -180; lng <= 180; lng += 2) coords.push([lng, lat]);
-    lines.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-  }
-  return { type: "FeatureCollection", features: lines };
-}
-const graticuleFeat = makeGraticule(15);
 
 const oceanFeature: GeoJSON.Feature = {
   type: "Feature",
@@ -64,7 +51,7 @@ export interface MapController {
 }
 
 /**
- * Create the MapLibre map instance with the base tactical style.
+ * Create the MapLibre map instance with the continuous dark monochrome base style.
  * Returns the controller with resetHome + destroy helpers.
  */
 export function createMap(opts: CreateMapOptions): MapController {
@@ -78,10 +65,8 @@ export function createMap(opts: CreateMapOptions): MapController {
     pitch: 0,
   };
 
-  // Conditionally add the vector tile source (roads/buildings/labels).
-  // Only present when the active provider ships vector tiles (MapTiler, self-hosted).
-  // Esri satellite-only baseline has no vector tiles — layers that reference
-  // this source skip mounting when it's absent.
+  // Vector tile source (roads/buildings/water/landuse). Required for the
+  // dark monochrome aesthetic — the basemap IS the vector tiles.
   const vectorSource = buildVectorSource();
 
   const map = new maplibregl.Map({
@@ -90,91 +75,60 @@ export function createMap(opts: CreateMapOptions): MapController {
       version: 8,
       projection: { type: "globe" } as never,
       sources: {
-        satellite: buildRasterSource(),
         world: { type: "geojson", data: worldFeat as unknown as GeoJSON.GeoJSON },
         ocean: { type: "geojson", data: { type: "FeatureCollection", features: [oceanFeature] } },
-        graticule: { type: "geojson", data: graticuleFeat as unknown as GeoJSON.GeoJSON },
         ...(vectorSource ? { "vector-tiles": vectorSource } : {}),
       },
       layers: [
-        // Real satellite Earth — desaturated + darkened to monochrome tactical.
-        // Fades OUT at city zoom (11→13) so the stylized dark-mono cityscape
-        // (dark bg + lighter-gray water + 3D buildings + white roads) takes over,
-        // matching the SurveilTrack ground-view aesthetic.
-        {
-          id: "satellite-base",
-          type: "raster",
-          source: "satellite",
-          paint: {
-            "raster-opacity": ["interpolate", ["linear"], ["zoom"], 0, 1.0, 10, 1.0, 12, 0.55, 13.5, 0.0],
-            "raster-saturation": -0.85,
-            "raster-brightness-min": 0,
-            "raster-brightness-max": 0.85,
-            "raster-contrast": 0.15,
-            "raster-hue-rotate": 0,
-          },
-        },
-        // Dark monochrome ground base — fades IN as satellite fades out.
-        // Solid near-black so 3D buildings + white roads read clearly.
+        // ---- Solid dark ocean base (visible at ALL zoom levels) ----
+        // This is the canvas the vector tiles render on top of. Near-black
+        // so the white roads + dark buildings read with maximum contrast.
         { id: "ocean-fill", type: "fill", source: "ocean", paint: {
-          "fill-color": "#070708",
-          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.10, 11, 0.10, 13, 0.92, 15, 0.96],
+          "fill-color": "#050506",
+          "fill-opacity": 1.0,
         } },
-        // Water bodies (vector tiles) — lighter gray, only when vector tiles exist.
-        // Renders above the dark ground base so rivers/harbors read as lighter gray.
+
+        // ---- Water bodies (rivers, lakes, harbors) from vector tiles ----
+        // Dark gray — lighter than the ocean base so water features read
+        // as distinct from land. Visible at all zooms (continuous).
         ...(vectorSource ? [{
           id: "water-fill",
           type: "fill" as const,
           source: "vector-tiles",
           "source-layer": "water",
-          minzoom: 10,
           paint: {
-            "fill-color": "#1c1c20",
-            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 10, 0.0, 12, 0.85, 14, 1.0],
+            "fill-color": "#1a1a1f",
+            "fill-opacity": 1.0,
           },
         }] : []),
-        // Water line outline (shoreline definition)
-        ...(vectorSource ? [{
-          id: "water-line",
-          type: "line" as const,
-          source: "vector-tiles",
-          "source-layer": "water",
-          minzoom: 13,
-          paint: {
-            "line-color": "#ffffff",
-            "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.3, 16, 0.7],
-            "line-opacity": 0.25,
-          },
-        }] : []),
-        // Landuse (parks, urban fabric) — subtle dark texture variation at city zoom
+
+        // ---- Landuse (parks, urban fabric) — subtle texture variation ----
         ...(vectorSource ? [{
           id: "landuse-fill",
           type: "fill" as const,
           source: "vector-tiles",
           "source-layer": "landuse",
-          minzoom: 12,
           paint: {
-            "fill-color": "#0c0c0e",
-            "fill-opacity": 0.6,
+            "fill-color": "#0a0a0c",
+            "fill-opacity": 1.0,
           },
         }] : []),
-        { id: "graticule", type: "line", source: "graticule", paint: {
-          "line-color": "#fff",
-          "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.06, 11, 0.06, 13, 0.0],
-          "line-width": 0.4,
-        } },
+
+        // ---- Country outlines (globe/region zoom only) ----
+        // Subtle white outlines that fade out as roads take over at region zoom.
+        // Provides continental context at globe view without competing with roads.
         { id: "countries-fill", type: "fill", source: "world", paint: {
-          "fill-color": "#fff",
-          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.03, 11, 0.03, 13, 0.0],
+          "fill-color": "#0a0a0a",
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 8, 0.0],
         } },
         {
           id: "countries-line",
           type: "line",
           source: "world",
           paint: {
-            "line-color": "#fff",
-            "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.45, 3, 0.55, 6, 0.70, 11, 0.70, 13, 0.0],
-            "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 2, 0.8, 4, 1.2, 6, 1.8, 8, 2.4],
+            "line-color": "#ffffff",
+            "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.25, 4, 0.30, 8, 0.0],
+            "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 2, 0.7, 4, 0.9],
           },
         },
       ],
@@ -194,24 +148,23 @@ export function createMap(opts: CreateMapOptions): MapController {
     antialias: true,
   });
 
-  // ---- Auto-pitch: ease to isometric (55°) when zooming into city level ----
-  // Gives the SurveilTrack-style 3D cityscape view automatically. Reverts to
-  // flat (0°) when zooming back out to globe view. Only fires on threshold
-  // crossing (flat↔iso) so it doesn't fight mid-zoom user rotation.
-  let lastPitchState: "flat" | "iso" = "flat";
+  // ---- Auto-pitch: ease to isometric (50°) when zooming into city level ----
+  // Continuous Google Earth-like experience: flat globe at low zoom, tilts
+  // to isometric 3D cityscape as you zoom into streets. Smooth threshold
+  // crossing so it doesn't fight mid-zoom user rotation.
+  let lastPitchState: "flat" | "tilted" = "flat";
   const onZoom = () => {
     const z = map.getZoom();
     const p = map.getPitch();
-    // Threshold 12 aligns with the City layer-tab preset (zoom 12, pitch 45)
-    // and the ground-view chrome (zoom ≥ 12). Below 12 → flat globe view.
-    const wantIso = z >= 12;
-    const state: "flat" | "iso" = wantIso ? "iso" : "flat";
+    // Start tilting at zoom 8 (region level), full tilt by zoom 12.
+    const wantTilt = z >= 9;
+    const state: "flat" | "tilted" = wantTilt ? "tilted" : "flat";
     if (state === lastPitchState) return;
     lastPitchState = state;
-    if (wantIso && p < 25) {
-      map.easeTo({ pitch: 55, duration: 700 });
-    } else if (!wantIso && p > 25) {
-      map.easeTo({ pitch: 0, duration: 700 });
+    if (wantTilt && p < 30) {
+      map.easeTo({ pitch: 50, duration: 800 });
+    } else if (!wantTilt && p > 30) {
+      map.easeTo({ pitch: 0, duration: 800 });
     }
   };
   map.on("zoomend", onZoom);

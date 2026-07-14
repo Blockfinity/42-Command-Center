@@ -1,14 +1,13 @@
 // ---------------------------------------------------------------------------
-// Outposts layer — faction markers, health rings, clustering, selection pulse.
+// Outposts layer — white square markers with alphanumeric unit codes.
 //
-// TWO-TIER RENDERING (matches the SurveilTrack ground-view reference):
-//   • Globe/region zoom (0–12): faction-shape sprites (hex/diamond/square),
-//     health rings, glow halos, selection pulse — the cinematic command view.
-//   • City/street zoom (12+): plain white square markers with alphanumeric
-//     unit codes (e.g. "FNG-3300-NYC"), bright + crisp like the reference.
+// SINGLE-TIER RENDERING (matches the SurveilTrack reference):
+//   • Country/globe zoom (0–5): clustered white circle summaries
+//   • Region/street zoom (5+): individual white square markers with
+//     alphanumeric unit codes (e.g. "FNG-3300-NYC"), bright + crisp.
 //
-// The two tiers cross-fade via zoom-interpolated opacity so the transition
-// from globe to ground is seamless.
+// ONE CONTINUOUS experience — the same white-square marker aesthetic at all
+// zoom levels where individual outposts are visible. No two-mode transition.
 //
 // Consumes source: "game:outposts" (clustered GeoJSON points).
 // Handles outpost click selection via the interaction context.
@@ -18,8 +17,7 @@ import type maplibregl from "maplibre-gl";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { MapLayerSpec } from "../types";
 import { GAME_SOURCE_IDS } from "../sources/game-engine.source";
-import { makeFactionIcon, makeStreetMarker, FACTION_ICON } from "../utils/sprites";
-import type { FactionId } from "@/lib/types";
+import { makeStreetMarker } from "../utils/sprites";
 
 const SRC = "outposts-src";
 
@@ -50,77 +48,26 @@ export const outpostsLayer: MapLayerSpec = {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
       cluster: true,
-      clusterRadius: 32,
-      clusterMaxZoom: 5,
+      clusterRadius: 36,
+      clusterMaxZoom: 4,
       promoteId: "id",
     });
 
-    // Register faction sprite icons (globe view).
-    (["FANG", "HAMMER", "RESOLUTE"] as FactionId[]).forEach((f) => {
-      if (!map.hasImage(`faction-${f}`)) {
-        map.addImage(`faction-${f}`, makeFactionIcon(FACTION_ICON[f]));
-      }
-    });
-
-    // Register the street-level white-square marker (ground view).
+    // Register the white-square marker sprite (used at all zoom levels).
     if (!map.hasImage("street-marker")) {
       map.addImage("street-marker", makeStreetMarker());
     }
   },
 
   addLayers(map) {
-    // ===== GLOBE TIER (zoom 0–12) =====
-
-    // --- Outpost: soft halo glow (fades out at street zoom) ---
-    map.addLayer({
-      id: "outpost-glow",
-      type: "circle",
-      source: SRC,
-      filter: ["!", ["has", "point_count"]],
-      maxzoom: 13,
-      paint: {
-        "circle-radius": [
-          "interpolate", ["linear"], ["zoom"],
-          0, ["+", ["match", ["get", "type"], "FULL", 8, 6], ["*", ["get", "level"], 0.8]],
-          4, ["+", ["match", ["get", "type"], "FULL", 12, 9], ["*", ["get", "level"], 1.0]],
-          8, ["+", ["match", ["get", "type"], "FULL", 18, 13], ["*", ["get", "level"], 1.3]],
-        ],
-        "circle-color": "#fff",
-        "circle-opacity": [
-          "case", ["==", ["get", "isMine"], 1],
-          ["interpolate", ["linear"], ["zoom"], 0, 0.35, 11, 0.35, 13, 0.0],
-          ["interpolate", ["linear"], ["zoom"], 0, 0.15, 11, 0.15, 13, 0.0],
-        ],
-        "circle-blur": 1.5,
-        "circle-stroke-width": 0,
-      },
-    });
-
-    // --- Outpost: SAFEHOUSE fortified double-ring aura ---
-    map.addLayer({
-      id: "outpost-safehouse-aura",
-      type: "circle",
-      source: SRC,
-      filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "type"], "SAFEHOUSE"]],
-      maxzoom: 13,
-      paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 12, 4, 17, 8, 24],
-        "circle-color": "#fff",
-        "circle-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.06, 11, 0.06, 13, 0.0],
-        "circle-stroke-color": "#fff",
-        "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 11, 0.5, 13, 0.0],
-        "circle-stroke-width": 1.5,
-      },
-    });
-
-    // --- Outpost: selection / under-attack pulse ring (animated, both tiers) ---
+    // ===== SELECTION / UNDER-ATTACK PULSE (animated, all zoom levels) =====
     map.addLayer({
       id: "outpost-pulse",
       type: "circle",
       source: SRC,
       filter: ["any", ["==", ["get", "selected"], 1], ["==", ["get", "underAttack"], 1]],
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 14, 4, 22, 8, 34, 13, 16, 16, 22],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 14, 4, 20, 8, 28, 12, 16, 16, 22],
         "circle-color": "#fff",
         "circle-opacity": 0.25,
         "circle-blur": 0.8,
@@ -128,70 +75,19 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
 
-    // --- Outpost: health ring (globe tier only) ---
-    map.addLayer({
-      id: "outpost-health-ring",
-      type: "circle",
-      source: SRC,
-      filter: ["!", ["has", "point_count"]],
-      maxzoom: 13,
-      paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"],
-          0, ["match", ["get", "type"], "FULL", 11, 8],
-          4, ["match", ["get", "type"], "FULL", 16, 11],
-          8, ["match", ["get", "type"], "FULL", 24, 16]],
-        "circle-color": "rgba(0,0,0,0)",
-        "circle-stroke-color": "#fff",
-        "circle-stroke-opacity": [
-          "case",
-          ["==", ["get", "offline"], 1],
-          ["interpolate", ["linear"], ["zoom"], 0, 0.12, 11, 0.12, 13, 0.0],
-          ["interpolate", ["linear"], ["zoom"],
-            0, ["interpolate", ["linear"], ["get", "healthPct"], 0, 0.2, 1, 0.9],
-            11, ["interpolate", ["linear"], ["get", "healthPct"], 0, 0.2, 1, 0.9],
-            13, 0.0],
-        ],
-        "circle-stroke-width": 1.4,
-        "circle-opacity": ["case", ["==", ["get", "offline"], 1], 0.3, 0],
-      },
-    });
-
-    // --- Outpost: faction shape (globe tier only — maxzoom 12) ---
-    map.addLayer({
-      id: "outpost-shape",
-      type: "symbol",
-      source: SRC,
-      filter: ["!", ["has", "point_count"]],
-      maxzoom: 12,
-      layout: {
-        "icon-image": ["match", ["get", "faction"], "FANG", "faction-FANG", "HAMMER", "faction-HAMMER", "faction-RESOLUTE"],
-        "icon-size": ["interpolate", ["linear"], ["zoom"],
-          0, ["match", ["get", "type"], "FULL", 0.32, 0.22],
-          4, ["match", ["get", "type"], "FULL", 0.44, 0.3],
-          8, ["match", ["get", "type"], "FULL", 0.6, 0.42]],
-        "icon-allow-overlap": true,
-        "icon-ignore-placement": true,
-        "symbol-sort-key": ["match", ["get", "type"], "FULL", 2, 1],
-      },
-      paint: {
-        "icon-opacity": ["case", ["==", ["get", "offline"], 1], 0.3, 1],
-      },
-    });
-
-    // ===== STREET TIER (zoom 12+) =====
+    // ===== INDIVIDUAL OUTPOST MARKERS (zoom 5+) =====
 
     // --- Outpost: transparent hitbox (reliable click target) ---
     // Symbol layers aren't reliably returned by queryRenderedFeatures under
-    // pitch, so this invisible circle layer acts as the street-level click
-    // target. Radius matches the visible marker size.
+    // pitch, so this invisible circle layer acts as the click target.
     map.addLayer({
-      id: "outpost-street-hitbox",
+      id: "outpost-hitbox",
       type: "circle",
       source: SRC,
       filter: ["!", ["has", "point_count"]],
-      minzoom: 12,
+      minzoom: 5,
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 11, 14, 14, 16, 16, 18, 18],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 8, 8, 10, 12, 12, 14, 14, 16, 16, 18, 18],
         "circle-color": "rgba(0,0,0,0)",
         "circle-stroke-color": "rgba(0,0,0,0)",
         "circle-stroke-width": 0,
@@ -199,19 +95,19 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
 
-    // --- Outpost: white square marker (SurveilTrack-style) ---
+    // --- Outpost: white square marker (SurveilTrack-style, all zoom levels) ---
     map.addLayer({
-      id: "outpost-street-square",
+      id: "outpost-square",
       type: "symbol",
       source: SRC,
       filter: ["!", ["has", "point_count"]],
-      minzoom: 12,
+      minzoom: 5,
       layout: {
         "icon-image": "street-marker",
-        "icon-size": ["interpolate", ["linear"], ["zoom"], 12, 0.55, 14, 0.7, 16, 0.85, 18, 1.0],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.35, 8, 0.5, 12, 0.65, 14, 0.75, 16, 0.85, 18, 1.0],
         "icon-allow-overlap": true,
         "icon-ignore-placement": true,
-        "symbol-sort-key": ["match", ["get", "type"], "FULL", 2, 1],
+        "symbol-sort-key": ["match", ["get", "type"], "FULL", 2, "SAFEHOUSE", 3, 1],
       },
       paint: {
         "icon-opacity": ["case", ["==", ["get", "offline"], 1], 0.4, 1],
@@ -220,16 +116,16 @@ export const outpostsLayer: MapLayerSpec = {
 
     // --- Outpost: alphanumeric unit code label (e.g. "FNG-3300-NYC") ---
     map.addLayer({
-      id: "outpost-street-code",
+      id: "outpost-code",
       type: "symbol",
       source: SRC,
       filter: ["!", ["has", "point_count"]],
-      minzoom: 13,
+      minzoom: 7,
       layout: {
         "text-field": "{code}",
         "text-font": ["Noto Sans Regular"],
-        "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9, 15, 11, 17, 13],
-        "text-offset": [0, 1.5],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 7, 8, 10, 9, 13, 11, 16, 13, 18, 14],
+        "text-offset": [0, 1.4],
         "text-anchor": "top",
         "text-allow-overlap": false,
         "text-ignore-placement": false,
@@ -243,15 +139,15 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
 
-    // --- Outpost: selection bracket (street tier — a brighter ring under the square) ---
+    // --- Outpost: selection bracket (brighter ring under the square) ---
     map.addLayer({
-      id: "outpost-street-select",
+      id: "outpost-select",
       type: "circle",
       source: SRC,
       filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "selected"], 1]],
-      minzoom: 12,
+      minzoom: 5,
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 12, 15, 16, 18, 20],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 10, 8, 13, 12, 15, 16, 18, 18, 20],
         "circle-color": "rgba(0,0,0,0)",
         "circle-stroke-color": "#ffffff",
         "circle-stroke-opacity": 0.9,
@@ -259,19 +155,19 @@ export const outpostsLayer: MapLayerSpec = {
       },
     });
 
-    // ===== CLUSTERS (globe tier only) =====
+    // ===== CLUSTERS (globe/country zoom only — zoom 0–4) =====
 
     map.addLayer({
       id: "outpost-clusters",
       type: "circle",
       source: SRC,
       filter: ["has", "point_count"],
-      maxzoom: 6,
+      maxzoom: 5,
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 16, 8, 24],
-        "circle-color": "rgba(255,255,255,0.10)",
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 16, 4, 22],
+        "circle-color": "rgba(255,255,255,0.08)",
         "circle-stroke-color": "#fff",
-        "circle-stroke-width": 0.5,
+        "circle-stroke-width": 0.6,
         "circle-stroke-opacity": 0.5,
       },
     });
@@ -280,7 +176,7 @@ export const outpostsLayer: MapLayerSpec = {
       type: "symbol",
       source: SRC,
       filter: ["has", "point_count"],
-      maxzoom: 6,
+      maxzoom: 5,
       layout: {
         "text-field": "{point_count}",
         "text-font": ["Noto Sans Regular"],
@@ -319,7 +215,7 @@ export const outpostsLayer: MapLayerSpec = {
         map.setPaintProperty("outpost-pulse", "circle-opacity", pulse);
         map.setPaintProperty("outpost-pulse", "circle-radius", [
           "interpolate", ["linear"], ["zoom"],
-          0, 14 + radiusBoost, 4, 22 + radiusBoost, 8, 34 + radiusBoost, 13, 16, 16, 22,
+          0, 14 + radiusBoost, 4, 20 + radiusBoost, 8, 28 + radiusBoost, 12, 16, 16, 22,
         ]);
       }
     } catch {
@@ -338,8 +234,7 @@ export const outpostsLayer: MapLayerSpec = {
     // Click tolerance in meters — shrinks at higher zoom (markers are visually
     // closer together). Generous at street zoom because the globe+pitch
     // unproject() has ~500m of positional error vs the rendered marker.
-    // Outposts are typically >10km apart, so a 1.2km threshold won't misselect.
-    const thresholdMeters = zoom < 6 ? 50000 : zoom < 10 ? 8000 : zoom < 13 ? 2000 : 1200;
+    const thresholdMeters = zoom < 5 ? 50000 : zoom < 8 ? 8000 : zoom < 12 ? 2000 : 1200;
 
     let nearest: { id: string; dist: number } | null = null;
     for (const op of cachedOutposts) {

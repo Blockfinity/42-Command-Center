@@ -1,27 +1,20 @@
 // ---------------------------------------------------------------------------
-// MapView — the main map component that replaces the monolithic world-map.tsx.
+// MapView — the main map component. ONE CONTINUOUS 3D MAP (Google Earth style).
 //
 // This is a thin shell:
 //   1. Creates a container div
 //   2. Initializes the map-controller (MapLibre + globe + auto-rotate + resetHome)
 //   3. Renders the LayerHost (which mounts all layers + sources + rAF loop)
 //   4. Renders HUD overlays (bearing readout, territory summary, placement hint,
-//      SurveilTrack-style ground-view chrome: UnitInfoPanel, zoom controls,
-//      City/District/Street layer tabs)
+//      SurveilTrack-style chrome: UnitInfoPanel when selected, zoom controls)
+//
+// No two-mode transition. Zoom is continuous from globe to street. The
+// SurveilTrack aesthetic (dark monochrome, white roads, 3D buildings, white
+// square markers with alphanumeric codes) is the basemap at ALL zoom levels.
 //
 // Data flow: the game-engine source adapter subscribes to the zustand store
 // and emits NormalizedEvents → the layer-host routes them to layers. This
 // component does NOT pass state to layers — it only reads state for HUD display.
-//
-// To add a new data source (42, AORDF, future AR app):
-//   1. Create sources/<name>.source.ts
-//   2. Add it to BOOT_SOURCES in registry/sources.ts
-//   Layers that subscribe to the new source's ID receive data automatically.
-//
-// To add a new visualization:
-//   1. Create layers/<name>.layer.ts
-//   2. Append it to LAYERS in registry/layers.ts
-//   No other changes needed.
 // ---------------------------------------------------------------------------
 
 "use client";
@@ -46,13 +39,6 @@ interface MapViewProps {
   placementMode: boolean;
 }
 
-/** Layer-tab presets — zoom + pitch combos matching the SurveilTrack reference. */
-const LAYER_TABS = [
-  { id: "CITY", label: "City", zoom: 12, pitch: 45 },
-  { id: "DISTRICT", label: "District", zoom: 14, pitch: 55 },
-  { id: "STREET", label: "Street", zoom: 16, pitch: 60 },
-] as const;
-
 export function MapView({
   initialCenter,
   selectedId,
@@ -65,12 +51,10 @@ export function MapView({
   const [bearing, setBearing] = React.useState(0);
   const [centerLat, setCenterLat] = React.useState(0);
   const [zoom, setZoom] = React.useState(1.6);
-  const [activeTab, setActiveTab] = React.useState<string | null>(null);
 
   // Read state from the store for HUD readouts + the selected outpost (for
-  // the ground-view UnitInfoPanel). Layer data flows through the source adapter.
+  // the UnitInfoPanel). Layer data flows through the source adapter.
   const state = useCommand((s) => s.state);
-  const setGroundView = useCommand((s) => s.setGroundView);
   const selectedOutpost = React.useMemo(
     () => state?.outposts.find((o) => o.id === selectedId) ?? null,
     [state, selectedId],
@@ -111,8 +95,6 @@ export function MapView({
       setBearing(Math.round(m.getBearing()));
       setCenterLat(Math.round(m.getCenter().lat));
       setZoom(Math.round(m.getZoom() * 10) / 10);
-      // Clear the active layer tab if the user zoomed away from any preset.
-      // (compare rounded zoom to the presets)
     };
     m.on("move", onMove);
     onMove();
@@ -146,29 +128,7 @@ export function MapView({
     return c;
   }, [state]);
 
-  // ---- Ground-view visibility (SurveilTrack chrome shows at city/street zoom) ----
-  const isGroundView = zoom >= 12;
-  // Sync to the store so command-deck can hide the floating OutpostDetailCard
-  // (the UnitInfoPanel replaces it at street zoom to avoid overlap/duplication).
-  React.useEffect(() => { setGroundView(isGroundView); }, [isGroundView, setGroundView]);
-
-  // ---- Layer tab click → ease to preset (centered on selected outpost or current center) ----
-  const handleTab = React.useCallback(
-    (tab: (typeof LAYER_TABS)[number]) => {
-      if (!map) return;
-      // Pause auto-rotate so its per-frame jumpTo doesn't cancel the easeTo.
-      const ctrl = (map as unknown as { _controller?: MapController })._controller;
-      ctrl?.pauseAutoRotate(1500);
-      const center = selectedOutpost
-        ? ([selectedOutpost.lng, selectedOutpost.lat] as [number, number])
-        : ([map.getCenter().lng, map.getCenter().lat] as [number, number]);
-      setActiveTab(tab.id);
-      map.easeTo({ center, zoom: tab.zoom, pitch: tab.pitch, duration: 900 });
-    },
-    [map, selectedOutpost],
-  );
-
-  // ---- Zoom controls ----
+  // ---- Zoom controls (always visible — Google Earth-like) ----
   const zoomIn = React.useCallback(() => {
     if (!map) return;
     (map as unknown as { _controller?: MapController })._controller?.pauseAutoRotate(800);
@@ -179,10 +139,9 @@ export function MapView({
     (map as unknown as { _controller?: MapController })._controller?.pauseAutoRotate(800);
     map.zoomOut({ duration: 500 });
   }, [map]);
-  const toggleFullscreen = React.useCallback(() => {
+  const resetView = React.useCallback(() => {
     if (!map) return;
-    const ctrl = (map as unknown as { _controller?: MapController })._controller;
-    ctrl?.resetHome();
+    (map as unknown as { _controller?: MapController })._controller?.resetHome();
   }, [map]);
 
   const cursor = placementMode ? "cursor-crosshair" : "cursor-grab";
@@ -203,44 +162,13 @@ export function MapView({
       {/* LayerHost mounts all gameplay layers + sources once the map is ready */}
       {map && <LayerHost map={map} interaction={interaction} />}
 
-      {/* ===== SurveilTrack-style ground-view chrome (city/street zoom only) ===== */}
+      {/* ===== SurveilTrack-style chrome ===== */}
 
-      {/* Layer tabs — City / District / Street (top-center, below the header) */}
-      <div
-        className={cn(
-          "pointer-events-auto absolute left-1/2 top-20 z-20 flex -translate-x-1/2 transition-opacity duration-300",
-          isGroundView || zoom >= 8 ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
-      >
-        <div className="flex border border-white/25 bg-black/80 backdrop-blur">
-          {LAYER_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTab(tab)}
-              className={cn(
-                "px-3 py-1 font-mono text-[9px] tracking-[0.18em] transition-colors",
-                activeTab === tab.id
-                  ? "bg-white/15 text-white"
-                  : "text-white/45 hover:text-white/80",
-                tab.id !== "CITY" && "border-l border-white/15",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Unit info panel — floating left-center, shown whenever a unit is selected */}
+      <UnitInfoPanel outpost={selectedOutpost} visible={!!selectedOutpost} />
 
-      {/* Unit info panel — floating left-center, shown when a unit is selected + ground view */}
-      <UnitInfoPanel outpost={selectedOutpost} visible={isGroundView} />
-
-      {/* Zoom controls — bottom-right */}
-      <div
-        className={cn(
-          "pointer-events-auto absolute bottom-8 right-4 z-20 flex flex-col gap-1 transition-opacity duration-300",
-          isGroundView ? "opacity-100" : "opacity-0 pointer-events-none",
-        )}
-      >
+      {/* Zoom controls — bottom-right, always visible (Google Earth-like) */}
+      <div className="pointer-events-auto absolute bottom-8 right-4 z-20 flex flex-col gap-1">
         <button
           onClick={zoomIn}
           aria-label="Zoom in"
@@ -256,7 +184,7 @@ export function MapView({
           <Minus className="h-4 w-4" />
         </button>
         <button
-          onClick={toggleFullscreen}
+          onClick={resetView}
           aria-label="Reset view"
           className="flex h-8 w-8 items-center justify-center border border-white/25 bg-black/80 text-white/85 backdrop-blur transition-colors hover:bg-white/15 hover:text-white"
         >
@@ -268,9 +196,7 @@ export function MapView({
 
       {/* Coordinate readout (bottom-left) */}
       <div className="pointer-events-none absolute bottom-3 left-4 font-mono text-[9px] tracking-[0.14em] text-white/40">
-        {isGroundView
-          ? `GROUND · Z${zoom.toFixed(1)} · ROT ${bearing}°`
-          : `GLOBE · LIMB LOCK · ROT ${bearing}°/${centerLat}°`}
+        Z{zoom.toFixed(1)} · ROT {bearing}°/{centerLat}°
       </div>
 
       {/* Network load readout (top-right) */}

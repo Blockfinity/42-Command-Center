@@ -1,19 +1,22 @@
 // ---------------------------------------------------------------------------
 // Roads layer — vector tile roads from the active provider.
 //
-// SurveilTrack-style bright white road network: a dark casing (outline) under
-// each road class plus a crisp white center line, widening at street zoom so
-// the network reads as the bright infrastructure grid seen in the reference.
+// SurveilTrack-style bright white road network on the dark base: a dark
+// casing (outline) under each road class plus a crisp white center line,
+// widening continuously with zoom so the network reads as the bright
+// infrastructure grid seen in the reference.
+//
+// ONE CONTINUOUS experience: major roads appear at country zoom (zoom 4+),
+// minor roads at region zoom, paths at city zoom. Smooth width scaling
+// across the full zoom range — no mode transition.
 //
 // Uses the "vector-tiles" source added by map-controller (when available).
-// Renders at zoom 6+ (country view needs major roads; street view needs all).
 //
 // This layer demonstrates the "no-source-subscription" pattern: it doesn't
 // consume NormalizedEvents — it renders directly from the vector tile source.
 // sourceIds is empty so the host routes no events to it.
 //
-// If the active provider has no vector tiles (Esri satellite-only), this
-// layer's addLayers() is a no-op.
+// If the active provider has no vector tiles, this layer's addLayers() is a no-op.
 // ---------------------------------------------------------------------------
 
 import type maplibregl from "maplibre-gl";
@@ -37,7 +40,7 @@ export const roadsLayer: MapLayerSpec = {
       type: "line",
       source: VECTOR_SRC,
       "source-layer": "transportation",
-      minzoom: 6,
+      minzoom: 4,
       filter: ["!=", ["get", "class"], "path"],
       layout: {
         "line-cap": "round",
@@ -49,16 +52,17 @@ export const roadsLayer: MapLayerSpec = {
           "interpolate",
           ["linear"],
           ["zoom"],
-          6, 0.6,
-          10, 1.0,
-          14, 2.0,
-          16, 4.0,
-          18, 7.0,
+          4, 0.4,
+          8, 0.7,
+          12, 1.4,
+          14, 2.2,
+          16, 4.5,
+          18, 8.0,
         ],
         "line-opacity": [
           "match",
           ["get", "class"],
-          ["motorway", "trunk"], 0.8,
+          ["motorway", "trunk"], 0.85,
           ["primary"], 0.7,
           ["secondary"], 0.6,
           ["tertiary"], 0.5,
@@ -74,7 +78,7 @@ export const roadsLayer: MapLayerSpec = {
       type: "line",
       source: VECTOR_SRC,
       "source-layer": "transportation",
-      minzoom: 6,
+      minzoom: 4,
       filter: ["!=", ["get", "class"], "path"],
       layout: {
         "line-cap": "round",
@@ -86,11 +90,12 @@ export const roadsLayer: MapLayerSpec = {
           "interpolate",
           ["linear"],
           ["zoom"],
-          6, 0.3,
-          10, 0.6,
-          14, 1.2,
-          16, 2.4,
-          18, 4.0,
+          4, 0.2,
+          8, 0.4,
+          12, 0.8,
+          14, 1.4,
+          16, 2.8,
+          18, 5.0,
         ],
         "line-opacity": [
           "match",
