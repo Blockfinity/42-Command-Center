@@ -1324,3 +1324,27 @@ Stage Summary:
 - Scalable architecture proposed: sources and layers move from map-specific to app-wide. 7 scalability principles locked. Migration path documented (8 steps, ~17 files affected).
 - Implementation plan restructured into 4 phases, 15 steps. Phase 1 (architectural foundation) must come first.
 - Ready to execute Phase 1 (repo restructure + Garrison rename + config flag + type cleanup) upon user confirmation (Q8).
+
+---
+Task ID: SPEC-7
+Agent: Z.ai Code (main session)
+Task: Correct GarrisonType values in spec (user correction: "Safehouse" | "Tactical Safehouse", not "SAFEHOUSE" | "TACTICAL").
+
+Work Log:
+- User corrected: the GarrisonType union values should be the full display names "Safehouse" | "Tactical Safehouse", not the short uppercase "SAFEHOUSE" | "TACTICAL".
+- Fixed docs/BACKEND_INTEGRATION_SPEC.md — 9 locations:
+  - §2.5 (line 78): enum becomes "Safehouse" | "Tactical Safehouse"
+  - §2.10 table (line 144): GarrisonType values row
+  - §2.10 prose (line 148): type: "Safehouse" / type: "Tactical Safehouse" examples
+  - §2.10 code block (line 152): export type GarrisonType = "Safehouse" | "Tactical Safehouse"
+  - §2.10 code block (line 157): comment // Safehouse (daemon) | Tactical Safehouse (plugin)
+  - §5.4 table (line 377): final values "Safehouse" | "Tactical Safehouse"
+  - Lock 5 (line 551): "Safehouse" / "Tactical Safehouse" placement labels
+  - Lock 39 (line 585): GarrisonType = "Safehouse" | "Tactical Safehouse"
+  - Resolved Q6 (line 612): GarrisonType = "Safehouse" | "Tactical Safehouse" only
+- NO CODE CHANGED — spec correction only.
+- Line 377 "Current" column still shows "FULL" | "TACTICAL" | "SAFEHOUSE" (describing existing code before rename) — this is correct as a before/after reference.
+
+Stage Summary:
+- Spec now correctly defines: GarrisonType = "Safehouse" | "Tactical Safehouse" (2 values, "FULL" dropped).
+- The placed structure interface = Garrison (was Outpost). GarrisonType = its type. "Outpost" = top-level faction group only — has nothing to do with the placed structure.

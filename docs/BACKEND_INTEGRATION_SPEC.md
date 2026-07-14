@@ -75,7 +75,7 @@ Placement is authorized only when all three conditions hold. The frontend **neve
 
 **Confirmed:** Pre-existing faction HQ outposts do **not** exist in the real system. Every outpost on the map is user-placed (Safehouse or Tactical Safehouse). Factions have no home bases.
 
-**Action:** The mock seed data faction HQs (Fang Prime, Hammer Forge, Resolute Stand, etc., currently `type: "FULL"`) get removed. The `OutpostType` enum becomes `"SAFEHOUSE" | "TACTICAL"` only — `"FULL"` is removed entirely (per lock 22).
+**Action:** The mock seed data faction HQs (Fang Prime, Hammer Forge, Resolute Stand, etc., currently `type: "FULL"`) get removed. The `OutpostType` enum becomes `"Safehouse" | "Tactical Safehouse"` only — `"FULL"` is removed entirely (per lock 22).
 
 ### 2.6 Terminology — CORRECTED (locked)
 
@@ -141,20 +141,20 @@ The codebase had a naming collision: `Outpost` (the placed structure interface) 
 |---|---|
 | Current `Outpost` interface (placed structure) | Rename → **`Garrison`** |
 | Current `OutpostType` enum | Rename → **`GarrisonType`** |
-| `GarrisonType` values | `"SAFEHOUSE" \| "TACTICAL"` — **2 values only** (drop `"FULL"` per lock 22) |
+| `GarrisonType` values | `"Safehouse" \| "Tactical Safehouse"` — **2 values only** (drop `"FULL"` per lock 22) |
 | New `Outpost` type (top-level group) | `{ number: number; factionName: string }` |
 | Each `Garrison` references its outpost | `outpostNumber: number` (33/21/7) |
 
-**Why "garrison":** A garrison is a military installation. The placed structure IS a garrison. It has a *type* — either a Safehouse (full node daemon) or Tactical Safehouse (edge plugin). So: a `Garrison` of `type: "SAFEHOUSE"` is a Safehouse; a `Garrison` of `type: "TACTICAL"` is a Tactical Safehouse. Clean separation between the structure (garrison) and the node class (safehouse/tactical).
+**Why "garrison":** A garrison is a military installation. The placed structure IS a garrison. It has a *type* — either a Safehouse (full node daemon) or Tactical Safehouse (edge plugin). So: a `Garrison` of `type: "Safehouse"` is a Safehouse; a `Garrison` of `type: "Tactical Safehouse"` is a Tactical Safehouse. Clean separation between the structure (garrison) and its type (safehouse / tactical safehouse).
 
 ```typescript
 // PROPOSED (after refactor)
-export type GarrisonType = "SAFEHOUSE" | "TACTICAL";  // 2 values, not 3
+export type GarrisonType = "Safehouse" | "Tactical Safehouse";  // 2 values, not 3
 
 export interface Garrison {        // placed structure on the map
   id: string;
   name: string;                    // user-chosen at placement
-  type: GarrisonType;              // SAFEHOUSE (daemon) | TACTICAL (plugin)
+  type: GarrisonType;              // Safehouse (daemon) | Tactical Safehouse (plugin)
   faction: FactionId;              // backend internal; UI shows "Outpost 33 FANG"
   outpostNumber: number;           // 33 | 21 | 7 — which outpost this garrison belongs to
   // ... health, compute, uptime, etc.
@@ -374,7 +374,7 @@ The user specified the formula takes "uptime and health and other items" as inpu
 | `Outpost.name` | auto-generated "FANG NODE 5" | **User-provided at placement** (per lock 20) |
 | `Outpost.ownerName` | doesn't exist | **Add** — placing user's handle; shown on preview card only during sabotage (per lock 21) |
 | `Outpost.ownerWallet` | doesn't exist | **Add** — placing user's wallet address; for ownership verification |
-| `OutpostType` enum | `"FULL" \| "TACTICAL" \| "SAFEHOUSE"` | **Remove `"FULL"`** (per lock 22). Final values depend on §2.5 (do faction HQs exist?). If no faction HQs: `"SAFEHOUSE" \| "TACTICAL"`. |
+| `OutpostType` enum | `"FULL" \| "TACTICAL" \| "SAFEHOUSE"` | **Remove `"FULL"`** (per lock 22). Final values: `"Safehouse" \| "Tactical Safehouse"`. |
 | `GameState.operative` | no balance fields | Add: `walletVotc: number` (settled), `pendingVotc: number` (this cycle, from AORDF) |
 | Per-outpost accrual breakdown | doesn't exist | **Add** — Option B confirmed (per lock 23). AORDF must expose per-outpost accrual. |
 
@@ -548,7 +548,7 @@ mini-services/
 | 2 | VOTC earnings ← AORDF (sole calculator, inputs = uptime + health + other items) | ✅ Locked |
 | 3 | Attacks/defenses ← AORDF (origin), display only in FE | ✅ Locked |
 | 4 | Discovery feed ← AORDF (realtime stream) | ✅ Locked |
-| 5 | SAFEHOUSE placement ← Safehouse (daemon) installed on device; TACTICAL ← Tactical Safehouse (plugin) installed; gated by 42 | ✅ Locked |
+| 5 | `"Safehouse"` placement ← Safehouse (daemon) installed on device; `"Tactical Safehouse"` ← Tactical Safehouse (plugin) installed; gated by 42 | ✅ Locked |
 | 6 | Sol cycle ← 42-computed airdrop epoch; hybrid cadence; name "Sol cycle" locked | ✅ Locked |
 | 7 | Placement = once per device, lifetime (enforced by 42) | ✅ Locked |
 | 8 | Attacks cost target faction's token; defenses cost own faction's token; AORDF prices live | ✅ Locked |
@@ -582,7 +582,7 @@ mini-services/
 | 36 | Safehouse = full node (daemon, complete infrastructure). Tactical Safehouse = edge node (plugin, lightweight). The distinction is node class, not just "how it runs." | ✅ Locked |
 | 37 | Faction tokens (FANG, HAMMER, RESOLUTE) + VOTC are SPL tokens on Solana. Token symbol = faction name. | ✅ Locked |
 | 38 | Placed structure interface renamed `Outpost` → **`Garrison`**. Enum `OutpostType` → **`GarrisonType`**. | ✅ Locked |
-| 39 | `GarrisonType` = `"SAFEHOUSE" \| "TACTICAL"` (2 values only; `"FULL"` removed). | ✅ Locked |
+| 39 | `GarrisonType` = `"Safehouse" \| "Tactical Safehouse"` (2 values only; `"FULL"` removed). | ✅ Locked |
 | 40 | New `Outpost` type = top-level group `{ number: number; factionName: string }`. Each `Garrison` has `outpostNumber` referencing it. | ✅ Locked |
 | 41 | **Sources are app-wide** — live in `src/sources/`, not under `components/`. Any component/panel/store can consume any source. | ✅ Locked |
 | 42 | **Source registry is the single point of registration** — new sources added by creating a file + registering, not by editing existing code. | ✅ Locked |
@@ -609,7 +609,7 @@ mini-services/
 | ~~Q3~~ | ~~What's in "other items" of the VOTC formula?~~ | Reframed: AORDF owns the full formula; 42 doesn't enumerate inputs. §5.2. |
 | ~~Q4~~ | ~~Formula public or opaque?~~ | **Public through AORDF**, not 42. §5.2. |
 | ~~Q5~~ | ~~Per-outpost accrual breakdown in UI: Option A or B?~~ | **Option B** locked (lock 23). §5.5. |
-| ~~Q6~~ | ~~Do pre-existing faction HQ outposts exist in the real system?~~ | **No.** Every outpost is user-placed. `OutpostType` = `"SAFEHOUSE" \| "TACTICAL"` only. §2.5. |
+| ~~Q6~~ | ~~Do pre-existing faction HQ outposts exist in the real system?~~ | **No.** Every garrison is user-placed. `GarrisonType` = `"Safehouse" \| "Tactical Safehouse"` only. §2.5. |
 | ~~Q7~~ | ~~How is the codename assigned to a new outpost number?~~ | Not range-based, not independent. Outpost# + faction are fixed properties of the outpost itself. Users join an existing outpost. §2.9. |
 | ~~Q8~~ | ~~What's the user-facing label format for codenames?~~ | "Outpost 33 FANG". User's personal handle = "moniker". §2.6, §2.8. |
 | ~~Q9~~ | ~~What determines the user's rank?~~ | **AORDF** computes rank. 42 displays it. §6.3. |
