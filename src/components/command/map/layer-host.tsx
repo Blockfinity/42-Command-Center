@@ -85,18 +85,21 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
             break;
           }
         }
-        // If no layer handled it → empty-ocean click.
+        // If no layer handled it → empty-ocean / empty-ground click.
         if (!handled) {
           const intr = interactionRef.current;
           if (intr.placementMode) {
             intr.onMapClick(e.lngLat.lat, e.lngLat.lng);
           } else {
-            // Globe reset: ease back to home position + deselect.
-            // The map-controller exposes resetHome via the map instance's
-            // _controller property (set by map-view.tsx).
-            const controller = (map as unknown as { _controller?: { resetHome: () => void } })._controller;
-            controller?.resetHome();
+            // Deselect the active outpost (if any).
             intr.onSelect(null);
+            // Globe reset (ease back to home) — only at low zoom. At street
+            // zoom, clicking empty ground just deselects; resetting the camera
+            // all the way to globe view would be disorienting.
+            if (map.getZoom() < 10) {
+              const controller = (map as unknown as { _controller?: { resetHome: () => void } })._controller;
+              controller?.resetHome();
+            }
           }
         }
       };
@@ -119,8 +122,15 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         const intr = interactionRef.current;
         map.getCanvas().style.cursor = intr.placementMode ? "crosshair" : "grab";
       };
-      // Outpost hover → pointer
-      ["outpost-shape", "outpost-health-ring", "outpost-clusters"].forEach((layerId) => {
+      // Outpost hover → pointer (both globe-tier and street-tier marker layers)
+      [
+        "outpost-shape",
+        "outpost-health-ring",
+        "outpost-clusters",
+        "outpost-street-square",
+        "outpost-street-code",
+        "outpost-street-select",
+      ].forEach((layerId) => {
         if (map.getLayer(layerId)) {
           map.on("mouseenter", layerId, setPointer);
           map.on("mouseleave", layerId, setGrab);
@@ -145,7 +155,7 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         if (rafId !== null) cancelAnimationFrame(rafId);
         map.off("click", onClick);
         map.off("move", onMove);
-        ["outpost-shape", "outpost-health-ring", "outpost-clusters"].forEach((layerId) => {
+        ["outpost-shape", "outpost-health-ring", "outpost-clusters", "outpost-street-square", "outpost-street-code", "outpost-street-select"].forEach((layerId) => {
           if (map.getLayer(layerId)) {
             map.off("mouseenter", layerId, setPointer);
             map.off("mouseleave", layerId, setGrab);

@@ -16,6 +16,8 @@ interface CommandStore {
   briefing: Briefing | null;
   briefingLoading: boolean;
   selectedOutpostId: string | null;
+  // whether the map camera is at city/street zoom (≥12) — drives ground-view chrome
+  groundView: boolean;
   // mission launcher draft
   pendingMission: { type: MissionType; sourceId: string | null } | null;
   placementMode: { type: OutpostType } | null;
@@ -24,6 +26,7 @@ interface CommandStore {
   init: () => () => void;
   sendAction: (a: ClientAction) => void;
   selectOutpost: (id: string | null) => void;
+  setGroundView: (v: boolean) => void;
   setPendingMission: (m: { type: MissionType; sourceId: string | null } | null) => void;
   setPlacementMode: (m: { type: OutpostType } | null) => void;
   fetchBriefing: () => Promise<void>;
@@ -52,6 +55,7 @@ export const useCommand = create<CommandStore>((set, get) => ({
   briefing: null,
   briefingLoading: false,
   selectedOutpostId: null,
+  groundView: false,
   pendingMission: null,
   placementMode: null,
   socket: null,
@@ -84,6 +88,8 @@ export const useCommand = create<CommandStore>((set, get) => ({
   },
 
   selectOutpost: (id) => set({ selectedOutpostId: id }),
+
+  setGroundView: (v) => set({ groundView: v }),
 
   setPendingMission: (m) => set({ pendingMission: m }),
 

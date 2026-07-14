@@ -18,12 +18,47 @@ import { FACTION_ICON } from "@/lib/factions";
 // Re-export so existing imports from @/lib/map/converters keep working.
 export { FACTION_ICON };
 
+// ---- Alphanumeric unit codes (SurveilTrack-style: FNG-3300-NYC) ----
+// Format: {faction 3-letter}-{4-digit}-{3-letter region}. Deterministic per
+// outpost id so the code is stable across reconnects/reloads.
+const FACTION_CODE: Record<FactionId, string> = {
+  FANG: "FNG",
+  HAMMER: "HMR",
+  RESOLUTE: "RSL",
+};
+
+/** Coarse lat/lng → 3-letter region code (for the unit-code suffix). */
+function regionCode(lat: number, lng: number): string {
+  if (lng < -100) return lat > 35 ? "SEA" : lat > 15 ? "LAX" : "MEX";
+  if (lng < -60) return lat > 35 ? "NYC" : lat > -15 ? "MIA" : "SAO";
+  if (lng < -20) return lat > 35 ? "LON" : "CAI";
+  if (lng < 20) return lat > 35 ? "BER" : lat > 0 ? "CAI" : "JNB";
+  if (lng < 60) return lat > 50 ? "MOW" : lat > 25 ? "DXB" : "BOM";
+  if (lng < 100) return lat > 35 ? "BEI" : "SIN";
+  if (lng < 140) return lat > 35 ? "TYO" : "MNL";
+  return lat > -30 ? "SYD" : "AKL";
+}
+
+/** Stable 4-digit number (1000–9999) from a string id hash. */
+function hash4(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return 1000 + (Math.abs(h) % 9000);
+}
+
+/** Build the SurveilTrack-style unit code, e.g. "FNG-3300-NYC". */
+export function outpostUnitCode(op: Outpost): string {
+  return `${FACTION_CODE[op.faction]}-${hash4(op.id)}-${regionCode(op.lat, op.lng)}`;
+}
+
 /** Outposts → GeoJSON points with rich properties for data-driven styling. */
 export function outpostsToGeoJSON(outposts: Outpost[], operativeFaction: FactionId, selectedId: string | null): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
     features: outposts.map((op) => {
       const healthPct = op.maxHealth > 0 ? Math.max(0, Math.min(1, op.health / op.maxHealth)) : 0;
+      const computePct = Math.max(0, Math.min(1, op.compute / 120)); // ~120 TFLOPS = 100%
+      const uptimeHr = Math.floor(op.uptime / 3600);
       return {
         type: "Feature" as const,
         properties: {
@@ -33,12 +68,15 @@ export function outpostsToGeoJSON(outposts: Outpost[], operativeFaction: Faction
           type: op.type,
           level: op.level,
           healthPct,
+          computePct,
+          uptimeHr,
           status: op.status,
           isMine: op.faction === operativeFaction ? 1 : 0,
           selected: op.id === selectedId ? 1 : 0,
           underAttack: op.status === "UNDER_ATTACK" ? 1 : 0,
           offline: op.status === "OFFLINE" ? 1 : 0,
           icon: FACTION_ICON[op.faction],
+          code: outpostUnitCode(op),
         },
         geometry: { type: "Point", coordinates: [op.lng, op.lat] },
       };

@@ -97,13 +97,16 @@ export function createMap(opts: CreateMapOptions): MapController {
         ...(vectorSource ? { "vector-tiles": vectorSource } : {}),
       },
       layers: [
-        // Real satellite Earth — desaturated + darkened to monochrome tactical
+        // Real satellite Earth — desaturated + darkened to monochrome tactical.
+        // Fades OUT at city zoom (11→13) so the stylized dark-mono cityscape
+        // (dark bg + lighter-gray water + 3D buildings + white roads) takes over,
+        // matching the SurveilTrack ground-view aesthetic.
         {
           id: "satellite-base",
           type: "raster",
           source: "satellite",
           paint: {
-            "raster-opacity": 1.0,
+            "raster-opacity": ["interpolate", ["linear"], ["zoom"], 0, 1.0, 10, 1.0, 12, 0.55, 13.5, 0.0],
             "raster-saturation": -0.85,
             "raster-brightness-min": 0,
             "raster-brightness-max": 0.85,
@@ -111,16 +114,66 @@ export function createMap(opts: CreateMapOptions): MapController {
             "raster-hue-rotate": 0,
           },
         },
-        { id: "ocean-fill", type: "fill", source: "ocean", paint: { "fill-color": "#000000", "fill-opacity": 0.10 } },
-        { id: "graticule", type: "line", source: "graticule", paint: { "line-color": "#fff", "line-opacity": 0.06, "line-width": 0.4 } },
-        { id: "countries-fill", type: "fill", source: "world", paint: { "fill-color": "#fff", "fill-opacity": 0.03 } },
+        // Dark monochrome ground base — fades IN as satellite fades out.
+        // Solid near-black so 3D buildings + white roads read clearly.
+        { id: "ocean-fill", type: "fill", source: "ocean", paint: {
+          "fill-color": "#070708",
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.10, 11, 0.10, 13, 0.92, 15, 0.96],
+        } },
+        // Water bodies (vector tiles) — lighter gray, only when vector tiles exist.
+        // Renders above the dark ground base so rivers/harbors read as lighter gray.
+        ...(vectorSource ? [{
+          id: "water-fill",
+          type: "fill" as const,
+          source: "vector-tiles",
+          "source-layer": "water",
+          minzoom: 10,
+          paint: {
+            "fill-color": "#1c1c20",
+            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 10, 0.0, 12, 0.85, 14, 1.0],
+          },
+        }] : []),
+        // Water line outline (shoreline definition)
+        ...(vectorSource ? [{
+          id: "water-line",
+          type: "line" as const,
+          source: "vector-tiles",
+          "source-layer": "water",
+          minzoom: 13,
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.3, 16, 0.7],
+            "line-opacity": 0.25,
+          },
+        }] : []),
+        // Landuse (parks, urban fabric) — subtle dark texture variation at city zoom
+        ...(vectorSource ? [{
+          id: "landuse-fill",
+          type: "fill" as const,
+          source: "vector-tiles",
+          "source-layer": "landuse",
+          minzoom: 12,
+          paint: {
+            "fill-color": "#0c0c0e",
+            "fill-opacity": 0.6,
+          },
+        }] : []),
+        { id: "graticule", type: "line", source: "graticule", paint: {
+          "line-color": "#fff",
+          "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.06, 11, 0.06, 13, 0.0],
+          "line-width": 0.4,
+        } },
+        { id: "countries-fill", type: "fill", source: "world", paint: {
+          "fill-color": "#fff",
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.03, 11, 0.03, 13, 0.0],
+        } },
         {
           id: "countries-line",
           type: "line",
           source: "world",
           paint: {
             "line-color": "#fff",
-            "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.45, 3, 0.55, 6, 0.70],
+            "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.45, 3, 0.55, 6, 0.70, 11, 0.70, 13, 0.0],
             "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 2, 0.8, 4, 1.2, 6, 1.8, 8, 2.4],
           },
         },
@@ -130,7 +183,9 @@ export function createMap(opts: CreateMapOptions): MapController {
     zoom,
     maxZoom: 18,
     minZoom: 0,
+    maxPitch: 70,
     bearing: 0,
+    pitch: 0,
     attributionControl: false,
     dragRotate: true,
     scrollZoom: true,
@@ -138,6 +193,28 @@ export function createMap(opts: CreateMapOptions): MapController {
     doubleClickZoom: true,
     antialias: true,
   });
+
+  // ---- Auto-pitch: ease to isometric (55°) when zooming into city level ----
+  // Gives the SurveilTrack-style 3D cityscape view automatically. Reverts to
+  // flat (0°) when zooming back out to globe view. Only fires on threshold
+  // crossing (flat↔iso) so it doesn't fight mid-zoom user rotation.
+  let lastPitchState: "flat" | "iso" = "flat";
+  const onZoom = () => {
+    const z = map.getZoom();
+    const p = map.getPitch();
+    // Threshold 12 aligns with the City layer-tab preset (zoom 12, pitch 45)
+    // and the ground-view chrome (zoom ≥ 12). Below 12 → flat globe view.
+    const wantIso = z >= 12;
+    const state: "flat" | "iso" = wantIso ? "iso" : "flat";
+    if (state === lastPitchState) return;
+    lastPitchState = state;
+    if (wantIso && p < 25) {
+      map.easeTo({ pitch: 55, duration: 700 });
+    } else if (!wantIso && p > 25) {
+      map.easeTo({ pitch: 0, duration: 700 });
+    }
+  };
+  map.on("zoomend", onZoom);
 
   // ---- Auto-rotate loop (pauses 3.5s after user interaction) ----
   let lastInteract = performance.now();
@@ -169,6 +246,8 @@ export function createMap(opts: CreateMapOptions): MapController {
     // NOTE: do NOT call map.stop() — calling stop() in the same tick as easeTo
     // prevents the ease from starting (MapLibre quirk).
     pauseAutoRotate(3500);
+    // Reset auto-pitch tracking so zooming back in re-engages isometric view.
+    lastPitchState = "flat";
     map.easeTo({
       center: homeCamera.center,
       zoom: homeCamera.zoom,
@@ -180,6 +259,7 @@ export function createMap(opts: CreateMapOptions): MapController {
 
   const destroy = () => {
     if (rafId !== null) cancelAnimationFrame(rafId);
+    map.off("zoomend", onZoom);
     container.removeEventListener("pointerdown", onInteract);
     container.removeEventListener("wheel", onInteract);
     container.removeEventListener("touchstart", onInteract);

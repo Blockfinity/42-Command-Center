@@ -155,3 +155,29 @@ export function makeFactionIcon(shape: FactionShape): { width: number; height: n
   const img = ctx.getImageData(0, 0, S, S);
   return { width: S, height: S, data: img.data };
 }
+
+/**
+ * Street-level unit marker — a crisp white square with a thin dark outline,
+ * matching the SurveilTrack ground-view reference (plain white square markers
+ * with alphanumeric codes). Rendered at zoom 12+ when the camera is at city
+ * /street level; the faction-shape sprites take over at globe/region zoom.
+ */
+export function makeStreetMarker(): { width: number; height: number; data: Uint8ClampedArray } {
+  const S = 32;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext("2d")!;
+  ctx.translate(S / 2, S / 2);
+  const r = S * 0.34;
+  // Dark outline (separates the square from buildings/roads behind it).
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(-r - 1, -r - 1, r * 2 + 2, r * 2 + 2);
+  // White square fill.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(-r, -r, r * 2, r * 2);
+  // Subtle inner dot for definition.
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(-1.5, -1.5, 3, 3);
+  const img = ctx.getImageData(0, 0, S, S);
+  return { width: S, height: S, data: img.data };
+}

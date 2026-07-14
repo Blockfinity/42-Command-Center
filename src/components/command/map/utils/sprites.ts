@@ -5,5 +5,5 @@
 // Layer files use makeFactionIcon() to register WebGL symbol-layer sprites.
 // ---------------------------------------------------------------------------
 
-export { makeFactionIcon, type FactionShape } from "@/lib/map/style";
+export { makeFactionIcon, makeStreetMarker, type FactionShape } from "@/lib/map/style";
 export { FACTION_ICON } from "@/lib/factions";

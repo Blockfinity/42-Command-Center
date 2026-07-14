@@ -1014,3 +1014,43 @@ Stage Summary:
 - Placement mode (Deploy Outpost) still forwards the clicked coord — unchanged.
 - Key gotcha documented inline: do NOT call map.stop() before easeTo in the
   same tick (MapLibre quirk prevents the ease from starting).
+
+---
+Task ID: GROUND-VIEW-1
+Agent: main (Z.ai Code)
+Task: Transform the zoomed-in ground view of the globe to match the SurveilTrack reference (stylized dark monochrome 3D cityscape, white square markers with alphanumeric codes, drone/unit info panel, zoom controls, City/District/Street layer tabs).
+
+Work Log:
+- Analyzed the user's SurveilTrack reference screenshot via VLM glm-4.6v: the zoomed ground view should be a stylized dark monochrome 3D cityscape (dark-gray extruded buildings, bright white road network, lighter-gray water bodies), with white square markers carrying alphanumeric codes (e.g. "AEC-4200-NYC"), a black drone/unit info panel (wireframe illustration + status + telemetry + PERFORMANCE/HEALTH tabs), zoom controls, and City/District/Street layer tabs. NOT photographic satellite.
+- Read prior worklog (1016 lines, 7 tasks incl. MAP-REBUILD-2, MAPTILER-1) to understand the modular map platform architecture: map-controller (MapLibre + globe + auto-rotate), tile-provider (MapTiler vector + satellite), layer-host (orchestrator), 6 layers (roads, buildings, territory, pings, missions, outposts), sources/game-engine adapter.
+- Added SurveilTrack-style alphanumeric unit codes to src/lib/map/converters.ts: `outpostUnitCode(op)` → "{FNG|HMR|RSL}-{4-digit hash}-{3-letter region}" (e.g. "FNG-2155-NYC"). Region derived from coarse lat/lng bucket (NYC/LON/TYO/etc.). Hash is stable per outpost id. Also added `computePct` + `uptimeHr` properties for the unit panel telemetry.
+- Transformed the basemap in map-controller.ts: satellite raster now fades out at zoom 11→13.5 (opacity 1.0→0.0) and a dark monochrome ground base fades in (ocean-fill #070708 opacity 0.10→0.96). Added water-fill layer (#1c1c20) + water-line (white shoreline) + landuse-fill from vector tiles, all fading in at city zoom. Graticule + country lines fade out at zoom 13. Result: globe view keeps photographic satellite; street view becomes a stylized dark-mono cityscape.
+- Added auto-pitch in map-controller.ts: a `zoomend` handler eases pitch to 55° when zoom crosses ≥12 (isometric cityscape) and back to 0° below 12 (flat globe). Threshold 12 aligns with the City layer-tab preset + ground-view chrome. Only fires on threshold crossing so it doesn't fight mid-zoom rotation. resetHome() resets the tracking.
+- Enhanced buildings.layer.ts: 3D fill-extrusion bodies (#161616) with amplified height (1.0×→2.0× across zoom 12→18), a second fill-extrusion "buildings-top" layer rendering bright white roof caps (#e8e8e8 @ 18% opacity), and crisp white edge outlines at zoom 14+. minzoom lowered to 12.
+- Enhanced roads.layer.ts: added a dark road-casing layer under each road class (black outline for separation from buildings) + brightened the white center lines (opacity 0.95 for motorways, width up to 4.0 at zoom 18). Paths layer preserved.
+- Added `makeStreetMarker()` to src/lib/map/style.ts: a 32px white square with a dark outline + inner dot, re-exported via utils/sprites.ts.
+- Rewrote outposts.layer.ts with TWO-TIER rendering: globe tier (zoom 0–12) keeps faction-shape sprites (hex/diamond/square) + glow + health rings (fading out via zoom-interpolated opacity); street tier (zoom 12+) renders plain white-square markers (street-marker sprite) + alphanumeric code labels ("{code}") with halo + a transparent "outpost-street-hitbox" circle layer for reliable click detection + a selection ring. Cluster layers maxzoom 6.
+- Updated layer-host.tsx: added the new street-tier layer IDs to the hover handler registration/cleanup.
+- Created src/components/command/map/unit-info-panel.tsx: a SurveilTrack-style floating panel (left-center, 252px) shown when an outpost is selected + ground view. Renders a wireframe outpost-tower SVG illustration, status dot+label (ACTIVE/DEGRADED/UNDER FIRE/OFFLINE), alphanumeric code, POWER (compute%) + SESSION (uptime) + SIGNAL (health-derived) telemetry rows, PERFORMANCE/HEALTH tabs with an animated progress bar (eases toward target over 1.4s), and a footer with outpost name + level. framer-motion entrance/exit.
+- Rewrote map-view.tsx: tracks zoom state; computes `isGroundView = zoom >= 12`; syncs `groundView` to the zustand store (so command-deck hides the OutpostDetailCard in ground view to avoid overlap); renders the UnitInfoPanel, City/District/Street layer tabs (top-20, below the header), + / - / reset zoom controls (bottom-right). Layer tabs easeTo zoom/pitch presets (City=12/45, District=14/55, Street=16/60) centered on the selected outpost or current center, with pauseAutoRotate(1500) so the auto-rotate loop doesn't cancel the ease. Zoom buttons pauseAutoRotate(800). Removed the CSS `transform: translateY(-50%) + height: 135%` on the map container (was breaking MapLibre's project()/queryRenderedFeatures coordinate alignment) — now `absolute inset-0`.
+- Added `groundView` boolean + `setGroundView` action to src/stores/command.ts; command-deck reads it and hides the OutpostDetailCard when groundView is true (the UnitInfoPanel takes over).
+- Fixed click-to-select under globe+pitch: queryRenderedFeatures is unreliable for symbol/circle layers under the globe projection + non-zero pitch (project()/unproject() have ~500m positional error vs the rendered marker). Rewrote outposts.onClick to use the click's `e.lngLat` (which MapLibre computes correctly) + a haversine nearest-outpost search over cached source data, with zoom-aware thresholds (50km globe / 8km region / 2km city / 1.2km street — generous to absorb the unproject error; outposts are >10km apart so no misselect). Cluster clicks still use queryRenderedFeatures (fine at globe zoom). Cache updated in onData().
+- Updated layer-host.tsx empty-ocean fallback: at street zoom (≥10) clicking empty ground just deselects (no resetHome — resetting to globe view would be disorienting); at globe zoom (<10) it still resets home + deselects.
+- Verified end-to-end via Agent Browser + VLM glm-4.6v:
+  • Boot screen → ESTABLISH UPLINK → command deck loads with globe view (photographic satellite, faction markers, ground chrome hidden). ✅
+  • Jumped to NYC (Fang Prime, 40.71/-74.00) at zoom 15.2 pitch 55: basemap transitions to stylized dark-mono cityscape — dark 3D extruded buildings with white roof caps, bright white road network with dark casing, lighter-gray water bodies (Hudson/East River). ✅
+  • White square marker "FNG-2155-NYC" renders on the map with the code label. ✅
+  • Real mouse click on the marker selects the outpost → UnitInfoPanel slides in on the left: wireframe tower, "UNDER FIRE" status (red), FNG-2155-NYC code, FULL type, POWER 1%, SESSION 4617h, SIGNAL STRONG, PERFORMANCE/HEALTH tabs, progress bar, Fang Prime LVL 02. ✅
+  • City/District/Street layer tabs visible at top-center (below the header); clicking District eases to zoom 14 pitch 55, Street to zoom 16 pitch 60. ✅
+  • +/- zoom controls visible bottom-right, uncovered (OutpostDetailCard hidden in ground view). ✅
+  • No overlapping panels, no console errors, lint clean. ✅
+  • VLM final rating: 9/10 SurveilTrack aesthetic match — all 7 verification criteria pass.
+- Lint clean (eslint . → 0 errors). Dev log clean (GET / 200, GET /api/state 200, no runtime errors).
+
+Stage Summary:
+- The zoomed-in ground view now matches the SurveilTrack reference: a cinematic stylized dark monochrome 3D cityscape with extruded buildings, white road network, gray water, white square markers carrying alphanumeric unit codes (FNG-XXXX-XXX), a drone/unit info panel with wireframe illustration + telemetry + PERFORMANCE/HEALTH tabs, zoom controls, and City/District/Street layer tabs.
+- The basemap is adaptive: photographic satellite at globe view (zoom < 11) cross-fades to the stylized dark-mono cityscape at street zoom (12+). Auto-pitch eases to isometric 55° at zoom ≥ 12.
+- Two-tier outpost markers: faction-shape sprites (hex/diamond/square) at globe view cross-fade to plain white squares with code labels at street zoom.
+- Click-to-select is robust under globe+pitch via lngLat-based nearest-outpost search (queryRenderedFeatures is unreliable under the globe projection + pitch).
+- The existing OutpostDetailCard hides in ground view (the UnitInfoPanel replaces it), eliminating overlap.
+- Globe view fully preserved — all prior interactivity (outpost selection, mission vectors, territory halos, placement, auto-rotate, reset-on-empty-ocean) intact.

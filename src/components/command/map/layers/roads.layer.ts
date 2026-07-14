@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
 // Roads layer — vector tile roads from the active provider.
 //
+// SurveilTrack-style bright white road network: a dark casing (outline) under
+// each road class plus a crisp white center line, widening at street zoom so
+// the network reads as the bright infrastructure grid seen in the reference.
+//
 // Uses the "vector-tiles" source added by map-controller (when available).
-// Renders thin white road lines with opacity by road class — motorways and
-// trunks are brightest, service roads and paths are dimmest. Shown only at
-// zoom 6+ (country/continent view needs roads; globe view doesn't).
+// Renders at zoom 6+ (country view needs major roads; street view needs all).
 //
 // This layer demonstrates the "no-source-subscription" pattern: it doesn't
 // consume NormalizedEvents — it renders directly from the vector tile source.
@@ -28,6 +30,45 @@ export const roadsLayer: MapLayerSpec = {
 
     // Roads — opacity by class. OpenMapTiles schema:
     // class: motorway | trunk | primary | secondary | tertiary | minor | service | path
+
+    // 1. Road casing (dark outline under each road for separation from buildings).
+    map.addLayer({
+      id: "roads-casing",
+      type: "line",
+      source: VECTOR_SRC,
+      "source-layer": "transportation",
+      minzoom: 6,
+      filter: ["!=", ["get", "class"], "path"],
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": "#000000",
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          6, 0.6,
+          10, 1.0,
+          14, 2.0,
+          16, 4.0,
+          18, 7.0,
+        ],
+        "line-opacity": [
+          "match",
+          ["get", "class"],
+          ["motorway", "trunk"], 0.8,
+          ["primary"], 0.7,
+          ["secondary"], 0.6,
+          ["tertiary"], 0.5,
+          ["minor", "service"], 0.4,
+          0.3,
+        ],
+      },
+    });
+
+    // 2. Road center line — bright white, width by road class.
     map.addLayer({
       id: "roads-line",
       type: "line",
@@ -48,22 +89,23 @@ export const roadsLayer: MapLayerSpec = {
           6, 0.3,
           10, 0.6,
           14, 1.2,
-          18, 2.4,
+          16, 2.4,
+          18, 4.0,
         ],
         "line-opacity": [
           "match",
           ["get", "class"],
-          ["motorway", "trunk"], 0.55,
-          ["primary"], 0.42,
-          ["secondary"], 0.32,
-          ["tertiary"], 0.24,
-          ["minor", "service"], 0.16,
-          0.10,
+          ["motorway", "trunk"], 0.95,
+          ["primary"], 0.85,
+          ["secondary"], 0.75,
+          ["tertiary"], 0.6,
+          ["minor", "service"], 0.45,
+          0.3,
         ],
       },
     });
 
-    // Paths — separate layer, dimmer, only at higher zoom
+    // 3. Paths — separate layer, dimmer, dashed, only at higher zoom.
     map.addLayer({
       id: "roads-path",
       type: "line",
@@ -74,13 +116,14 @@ export const roadsLayer: MapLayerSpec = {
       paint: {
         "line-color": "#ffffff",
         "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.2, 16, 0.5],
-        "line-opacity": 0.12,
+        "line-opacity": 0.2,
         "line-dasharray": [2, 2],
       },
     });
   },
 
   destroy(map) {
+    if (map.getLayer("roads-casing")) map.removeLayer("roads-casing");
     if (map.getLayer("roads-line")) map.removeLayer("roads-line");
     if (map.getLayer("roads-path")) map.removeLayer("roads-path");
   },
