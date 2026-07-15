@@ -88,10 +88,17 @@ export function createMap(opts: CreateMapOptions): MapController {
       },
       layers: [
         // ---- Satellite imagery base (BOTTOM layer — the visible globe) ----
-        // Plain, un-styled satellite tiles — no desaturation, no darkening,
-        // no contrast shift. The imagery is shown exactly as the tile provider
-        // delivers it.
-        { id: "satellite-base", type: "raster", source: "satellite" },
+        // Slightly desaturated + mildly darkened to match the tactical aesthetic
+        // without hiding the imagery. raster-saturation -0.3 subtle desaturation;
+        // brightness-max 0.8 keeps imagery visible but not glaring.
+        { id: "satellite-base", type: "raster", source: "satellite", paint: {
+          "raster-saturation": -0.3,
+          "raster-brightness-min": 0.0,
+          "raster-brightness-max": 0.8,
+          "raster-contrast": 0.05,
+          "raster-opacity": 1.0,
+          "raster-fade-duration": 0,
+        } },
 
         // ---- Solid dark ocean base (transparent — satellite shows oceans) ----
         // Kept as a fallback: if satellite tiles are still loading or fail,
