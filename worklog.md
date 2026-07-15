@@ -1780,3 +1780,49 @@ Stage Summary:
 - Dev log: no runtime errors (only expected HMR warnings).
 - Working tree clean. Repo up to date with origin/main.
 - The canonical checkpoint remains d03570d (CHECKPOINT-1). This commit (ed1f541) is a new feature commit on top of it.
+
+---
+Task ID: GESTURE-1
+Agent: Z.ai Code (main session)
+Task: Improve gesture controllers so the user can rotate when zoomed in, and ensure double-click zooms 3x.
+
+Work Log:
+- Audited the current map gesture config in map-controller.ts:
+  • dragRotate: true (already enabled) — right-click drag rotates
+  • touchZoomRotate: true (already enabled) — pinch/two-finger rotates on touch
+  • maxPitch: 70 — limits how far the camera can tilt (restrictive for dramatic 3D views)
+  • doubleClickZoom: false — was disabled in the previous task (VERIFY-COMMIT)
+- The user wants TWO things: (1) better rotation when zoomed in, (2) double-click zooms 3x.
+
+Changes to map-controller.ts:
+1. maxPitch: 70 → 80 — allows more dramatic oblique 3D cityscape views when zoomed in. At pitch 80 the camera is nearly horizontal, giving a full Google-Earth-style street-level perspective. Verified: VLM confirms "dramatic 3D cityscape" at pitch 65.
+2. Explicitly enabled all gesture controls for clarity: dragRotate, dragPan, scrollZoom, touchZoomRotate, touchPitch, keyboard. All were already true by default but now they're explicit so future changes don't accidentally disable them.
+3. Custom dblclick handler: zooms 3 levels (not MapLibre's default 1) centered on the click point. Uses easeTo with 600ms duration. Pauses auto-rotate for 1.5s. Clamped to maxZoom 18.
+4. doubleClickZoom stays false (built-in disabled) — the custom handler replaces it.
+
+Changes to layer-host.tsx (click-vs-dblclick disambiguation):
+- PROBLEM: MapLibre fires `click` on single click and `dblclick` on double-click, but a double-click also fires TWO `click` events before the `dblclick`. Without disambiguation, every double-click would trigger the single-click logic (deselect + reset to home at low zoom) BEFORE the 3x zoom — fighting the zoom animation.
+- FIX: Added a 250ms delay to the single-click handler. On the first click, a timer is set. If a second click arrives within 250ms, the timer is cancelled (single-click logic never runs) and the dblclick handler takes over (3x zoom). If no second click arrives within 250ms, the single-click logic runs (layer dispatch / deselect / reset).
+- Added cleanup: `if (clickTimer !== null) clearTimeout(clickTimer)` in the cleanup return.
+
+Self-verification (agent-browser):
+- Double-click 3x zoom: fired 3 consecutive dblclick events. Zoom went 1.60 → 4.60 → 7.60 → 10.60 (exactly +3 per double-click). ✅
+- Auto-pitch on dblclick: after the 3rd dblclick crossed zoom 9, pitch auto-engaged to 50.0. ✅
+- Click-vs-dblclick disambiguation: fired 2 rapid clicks (simulating double-click) at zoom 3 — center/zoom did NOT change (single-click reset was cancelled). ✅
+- Single-click reset still works: fired 1 real mouse click at zoom 4 (panned to [20,-10]) — camera started easing back toward home ([-74,40.7] zoom 1.6). ✅
+- maxPitch = 80: confirmed via mp.getMaxPitch(). ✅
+- dragRotate enabled: confirmed via mp.dragRotate.isEnabled(). ✅
+- VLM at zoom 14 pitch 65: "3D extruded buildings with vertical walls... oblique tilted angle... white road lines visible... dramatic 3D cityscape." ✅
+- Lint: 0 errors, 0 warnings. ✅
+- No console/runtime errors. ✅
+
+Lint + push:
+- bun run lint → 0 errors, 0 warnings.
+- Committed as 6bb3ead "feat(map): improve gesture controls + double-click 3x zoom" (2 files: +86/-36).
+- Pushed to origin/main.
+
+Stage Summary:
+- Rotation/tilt/pan gestures are fully enabled at all zoom levels. maxPitch increased to 80 for dramatic 3D views. Users can right-click drag (or Ctrl+drag) to rotate, two-finger/pinch to rotate+tilt on touch, and scroll to zoom.
+- Double-click now zooms 3 levels (not 1) centered on the click point — fast navigation into street view.
+- Single-click and double-click are properly disambiguated via a 250ms delay: double-click ONLY zooms, single-click ONLY deselects/resets.
+- The auto-pitch (50° at zoom 9+) still engages correctly after double-click zoom crosses the threshold.
