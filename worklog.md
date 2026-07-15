@@ -1700,3 +1700,46 @@ Stage Summary:
 - All PERF-1 optimizations retained: 110m world-atlas, rAF throttle, auto-rotate throttle, visibility gating, map chunk prefetch, GarrisonDetailCard code-split, build config hardening.
 - All gameplay layers (territory, pings, missions, garrisons) render on top of the monochromatic base — confirmed garrison markers visible at street zoom with unit codes (e.g. "FNG-6644-NYC").
 - The tile-provider.ts file remains in the tree (harmless, provides swappable architecture for future vector/raster tile providers) but is no longer imported by map-controller.
+
+---
+Task ID: STYLE-1
+Agent: Z.ai Code (main session)
+Task: Make the map dark — match the night-Earth aesthetic from two user-provided reference images (a dark moody globe view + a dark city-zoom with white road lines + dark 3D buildings + white square markers). Do NOT change the globe shape or the tile system — only adjust styling.
+
+Work Log:
+- Analyzed both reference images via VLM:
+  • Image 1 (globe view): dark, moody "night Earth" — deep black/navy oceans, dark landmasses, heavy desaturation, minimal color. Not bright photorealistic satellite.
+  • Image 2 (city zoom): dark charcoal background, white road lines, dark 3D buildings, white square markers with alphanumeric codes.
+- The user was explicit: use the images ONLY as reference for styling. Do NOT change the globe shape. Do NOT rip out the tile system (that was the PERF-2 mistake).
+- Restored the PERF-1 state (commit 4b0715c) as the baseline — reverted both in-session commits (19171c6 PERF-2 + a430486 partial revert) via `git checkout 4b0715c -- map-controller.ts layout.tsx`. Verified byte-identical to PERF-1.
+- Made ONE targeted change: the `satellite-base` raster layer paint properties only.
+  • raster-saturation: -0.3 → -0.9 (heavy desaturation → near-grayscale)
+  • raster-brightness-max: 0.8 → 0.35 (deep, moody darkening)
+  • raster-contrast: 0.05 → 0.15 (land/water distinction holds at low brightness)
+- Did NOT touch: the tile system (satellite source, Esri tiles), the globe shape/projection, the other layers (ocean-fill, water-fill, landuse-fill, countries-fill, countries-line), or anything else in the app.
+
+Self-verification (agent-browser + VLM):
+- VLM on the rendered globe: "dark/moody (deep blacks, near-grayscale, night-Earth feel)... matches the aesthetic of a dark night-Earth satellite view... globe is still visible — continents distinguishable... overall color tone is dark/monochrome." ✅
+- Lint: 0 errors, 0 warnings. ✅
+- Committed as d03570d, pushed to origin/main.
+
+Stage Summary:
+- The globe is now dark and moody, matching the night-Earth reference aesthetic.
+- The tile system is intact. The globe shape is unchanged.
+- ONLY the satellite-base layer paint properties were modified.
+
+---
+Task ID: CHECKPOINT-1
+Agent: Z.ai Code (main session)
+Task: Save absolutely everything in the repo + logs as the ONLY valid checkpoint in case of reset or delete. Update the repo.
+
+Work Log:
+- Working tree verified clean (git status --short → empty).
+- All work through STYLE-1 (commit d03570d) is committed and pushed to origin/main.
+- Appended this worklog entry documenting the checkpoint state.
+- The canonical checkpoint is commit d03570d on origin/main. In case of reset/delete, restore to this commit.
+
+Stage Summary:
+- CHECKPOINT ESTABLISHED: commit d03570d on origin/main.
+- This is the ONLY valid checkpoint. All prior session work (PERF-1 optimizations, audio integration, Garrison rename, dark-styling) is captured in this checkpoint.
+- Repo is up to date with origin/main. Ready to proceed with new feature work (reset-view button + 3D building fix).
