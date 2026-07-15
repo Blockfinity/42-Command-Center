@@ -1847,3 +1847,51 @@ Stage Summary:
 - This is the ONLY valid restore point. To recover: `git checkout checkpoint-canonical`.
 - Session work captured: (1) globe auto-spin on axis via center-longitude drift (right-to-left, westward surface motion, gated to zoom < 9), (2) starting zoom reduced 1% from 1.6 to 1.584, (3) LayerHost isMapReady() guard fixing the unmount-race TypeError that crashed outposts.layer.ts onData → map.getSource.
 - Build verified: lint clean (0 errors, 0 warnings), dev server compiles, page loads 200, no runtime/console errors, globe renders with auto-spin + dark night-Earth styling + 3D buildings + gesture controls.
+
+---
+Task ID: SESSION-5
+Agent: main (Z.ai Code)
+Task: Multi-topic session — globe spin direction fix, zoom tweak, crash fix, checkpoint, scaling architecture assessment, third-party engine deep dives, hot-key-icon sound.
+
+Work Log:
+
+[CHECKPOINT-SESSION-4 / globe spin + zoom + crash fix — already committed as f6be9cf, tagged checkpoint-canonical at e328b3b]
+- Globe auto-spin: changed from setBearing (clock-hand rotation) to center-longitude drift via jumpTo — surface now drifts right-to-left (westward) on its axis, gated to zoom < 9.
+- Starting zoom reduced 1%: 1.6 → 1.584.
+- LayerHost isMapReady() guard (map.style && !map._removed) applied to source subscription + animate loop — fixes "this.style is undefined" TypeError on unmount race (outposts.layer.ts onData → map.getSource crashing after map.remove()).
+
+[GESTURE-CONTROLS recap — already committed as 6bb3ead]
+- dragRotate/touchZoomRotate/touchPitch enabled, maxPitch 80.
+- Custom dblclick handler: zooms 3 levels (not 1) centered on click point. Built-in doubleClickZoom disabled.
+- Click vs dblclick disambiguation: 250ms delay in layer-host onClick.
+
+[SCALING ARCHITECTURE ASSESSMENT — documented for future reference]
+User clarified the product is a gamified network platform (like Hamster Kombat / Titan Network / Telegram miniapps) merging multiple gaming experiences. Target: 1M+ players within a day of launch. Per-entity simulation, 60fps, real consistency. Questions answered:
+- Q: Can we scale to millions without starting from scratch? A: YES. ~60% of codebase is correct foundation (MapLibre viz stack, layer-host registry, game data model, Caddy gateway pattern, Next.js+Zustand frontend). ~40% gets replaced in phases (game engine → sharded authorities, full broadcast → viewport-filtered deltas, unused SQLite → Postgres+Redis, sync handleAction → Kafka/NATS queue, no auth → NextAuth+JWT).
+- Q: Should we switch to PlayCanvas before launch? A: NO. Stay on MapLibre. Switching would add 4-6 months of frontend rewrite while leaving the actual scaling problem (backend realtime) untouched. MapLibre is purpose-built for geographic visualization; PlayCanvas is a general 3D engine that would require reimplementing tile pyramids, globe projection, geodesy, clustering from scratch.
+- Architecture audit findings: game-engine is single-process in-memory `let state`, full-state broadcast every 2s via io.emit, no persistence (SQLite wired but zero callers), no sharding, no auth, no viewport queries. Realistic ceiling today: few thousand concurrent. Path to 1M is phased backend work, visualization untouched.
+- Conclusion: We are good to start. We can scale from here in weeks. Do not switch engines.
+
+[THIRD-PARTY ENGINE DEEP DIVES — documented for future reference]
+- github.com/carbonengine (CARBON Engine, EVE Online's engine, open-sourced Jul 9 2026 by Fenris/CCP): 33 repos, all C++/C/CMake native. NOT viable for our Next.js web project — total stack mismatch (native desktop vs browser, custom rendering vs MapLibre, Stackless Python greenlets vs JS event loop). Zero actionable code. Mild UX/aesthetic reference value only (EVE's command UI is spiritually close to our aesthetic, but we're already on-target).
+- github.com/playcanvas (PlayCanvas, web-native game engine): 75 repos, JS/TS, 16.2k★ engine. More aligned with our stack than CARBON. Three repos evaluated:
+  - @playcanvas/react: React bindings for 3D engine. NOT for us — we already have MapLibre for globe rendering; swapping would be months of work to reimplement tile pyramids/geodesy/clustering.
+  - pcui (786★): UI component library for editor-style tools. Conflicts with our shadcn/ui standard; better fit for property-inspector UIs than our dashboard surfaces.
+  - supersplat (9.6k★): 3D Gaussian Splat editor. Wrong domain (photogrammetry, not stylized geographic viz).
+  - Conclusion: Don't pull anything in. Same bottom line as CARBON. MapLibre + shadcn remains the right stack.
+
+[HOT-KEY-ICON SOUND — committed as 10f8b75]
+- Copied /upload/Hot key icon.wav → /public/sounds/hot-key-icon.wav (renamed to hyphen-case per convention).
+- Added "hotkey" CueName to union type in use-sfx.ts.
+- Added CUES.hotkey spec: { freq: 700, dur: 0.05, type: "square", asset: "/sounds/hot-key-icon.wav", assetVolume: 0.6 }. Auto-prewarmed by existing useSfx prewarm loop.
+- Wired both activation paths in command-deck.tsx:
+  - Click path (handleNav): replaced transition/click conditional with single sfx.play("hotkey").
+  - Keyboard path (1-8): added playRef stable ref to sfx.play, fires playRef.current("hotkey") before setView.
+- Verified: lint clean, sound file 200 OK, click+keyboard both play sound, no runtime/console errors. Respects mute toggle.
+
+Stage Summary:
+- HEAD = 10f8b75 (hot-key-icon sound work on top of checkpoint e328b3b).
+- All session work committed: globe spin direction, zoom 1% reduction, unmount-race crash fix, hot-key-icon sound (click + keyboard paths).
+- Architecture decisions documented: staying on MapLibre, scaling via phased backend work (not engine switch). 1M-user path is backend realtime infrastructure (sharding + delta sync + persistence + action queue + auth), visualization stack untouched.
+- Third-party deep dives documented: CARBON Engine and PlayCanvas both evaluated and rejected with concrete technical rationale.
+- Checkpoint to be re-established at current HEAD after this worklog commit.
