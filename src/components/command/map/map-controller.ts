@@ -57,7 +57,7 @@ export interface MapController {
  * Returns the controller with resetHome + destroy helpers.
  */
 export function createMap(opts: CreateMapOptions): MapController {
-  const { container, center, zoom = 1.6 } = opts;
+  const { container, center, zoom = 1.584 } = opts;
 
   // Stash the home camera so resetHome() can ease back to exactly the boot view.
   const homeCamera = {
