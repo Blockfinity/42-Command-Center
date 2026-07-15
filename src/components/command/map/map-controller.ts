@@ -88,14 +88,14 @@ export function createMap(opts: CreateMapOptions): MapController {
       },
       layers: [
         // ---- Satellite imagery base (BOTTOM layer — the visible globe) ----
-        // Slightly desaturated + mildly darkened to match the tactical aesthetic
-        // without hiding the imagery. raster-saturation -0.3 subtle desaturation;
-        // brightness-max 0.8 keeps imagery visible but not glaring.
+        // Dark, moody "night-Earth" aesthetic per the reference images:
+        // heavy desaturation (near-grayscale), deep brightness reduction,
+        // slight contrast so land/water distinction holds at low brightness.
         { id: "satellite-base", type: "raster", source: "satellite", paint: {
-          "raster-saturation": -0.3,
+          "raster-saturation": -0.9,
           "raster-brightness-min": 0.0,
-          "raster-brightness-max": 0.8,
-          "raster-contrast": 0.05,
+          "raster-brightness-max": 0.35,
+          "raster-contrast": 0.15,
           "raster-opacity": 1.0,
           "raster-fade-duration": 0,
         } },
