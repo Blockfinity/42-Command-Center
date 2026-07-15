@@ -24,7 +24,7 @@ import * as React from "react";
  *   sfx.stopTicking()      — stop the ticking ambience
  */
 
-type CueName = "key" | "click" | "confirm" | "deny" | "select" | "transition" | "place" | "boot" | "powerOn";
+type CueName = "key" | "click" | "confirm" | "deny" | "select" | "transition" | "place" | "boot" | "powerOn" | "hotkey";
 
 // ── module-level singleton (shared across all hook callers) ──────────────
 let _ctx: AudioContext | null = null;
@@ -74,6 +74,11 @@ const CUES: Record<
   confirm: { freq: 740, dur: 0.12, type: "triangle", sweep: 1.5 },
   deny: { freq: 180, dur: 0.18, type: "sawtooth", sweep: 0.5 },
   select: { freq: 520, dur: 0.05, type: "square" },
+  // Hot key icon press — backed by the real recorded asset. Plays when the
+  // user clicks a nav-rail icon OR presses the corresponding keyboard
+  // shortcut (1–8). Distinct from `click` (generic button) so hot-key
+  // activations have their own signature cue.
+  hotkey: { freq: 700, dur: 0.05, type: "square", asset: "/sounds/hot-key-icon.wav", assetVolume: 0.6 },
   transition: { freq: 420, dur: 0.1, type: "triangle", sweep: 1.8 },
   place: { freq: 300, dur: 0.14, type: "triangle", sweep: 2.2 },
   // Boot sequence tick — backed by the real recorded asset, played once per

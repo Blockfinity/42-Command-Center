@@ -43,6 +43,12 @@ export function CommandDeck() {
   const sfx = useSfx();
   const clock = useClockData();
 
+  // Stable ref to sfx.play for use in the keydown effect below without
+  // forcing the effect to re-subscribe every render (sfx is a new object
+  // each render, but sfx.play is stable via useCallback([])).
+  const playRef = React.useRef(sfx.play);
+  playRef.current = sfx.play;
+
   const [view, setView] = React.useState<NavView | null>(null);
   const [started, setStarted] = React.useState(false);
   const [bootError, setBootError] = React.useState(false);
@@ -118,20 +124,23 @@ export function CommandDeck() {
       };
       if (navMap[e.key] && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const tag = (e.target as HTMLElement)?.tagName;
-        if (tag !== "INPUT" && tag !== "TEXTAREA") setView(navMap[e.key]);
+        if (tag !== "INPUT" && tag !== "TEXTAREA") {
+          // Hot key icon activated via keyboard — play the signature cue.
+          playRef.current("hotkey");
+          setView(navMap[e.key]);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [setPlacement, setPending, select]);
 
-  // ---- nav with panel-open sound ----
+  // ---- nav with hot-key-icon sound ----
   function handleNav(v: NavView) {
-    if (v !== view) {
-      sfx.play("transition");
-    } else {
-      sfx.play("click");
-    }
+    // Every hot key icon press plays the signature cue — whether activated
+    // by click or by keyboard shortcut (the keyboard path fires the same
+    // cue via playRef in the keydown effect above).
+    sfx.play("hotkey");
     setView(v);
   }
 
