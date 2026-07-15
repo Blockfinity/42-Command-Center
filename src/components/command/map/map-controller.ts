@@ -2,18 +2,18 @@
 // Map controller — MapLibre initialization, camera, globe projection, and
 // the auto-rotate interaction loop.
 //
-// MONOCHROMATIC COMMAND-CENTER GLOBE. No external map tiles — the entire
-// basemap is rendered from local GeoJSON (world-atlas 110m + a generated
-// graticule). This keeps the aesthetic pure black-and-white / cinematic
-// (dark ocean void, dark landmass silhouettes, white country outlines, faint
-// lat-long grid) AND makes the globe load instantly with zero network
-// requests for tiles.
-//
-// Gameplay layers (garrisons, missions, territory, activity pings) are mounted
-// on top by the layer-host after the map loads.
+// ONE CONTINUOUS 3D MAP (Google Earth style). No two-mode transition.
+// Pure dark monochrome basemap at ALL zoom levels — dark ocean fill, dark
+// water bodies, subtle country outlines at low zoom, white road lines,
+// 3D building extrusions at city zoom. Matches the SurveilTrack reference:
+// solid dark buildings, white road network, dark gray water, white square
+// markers with alphanumeric codes.
 //
 // The controller stores the initial "home" camera and exposes resetHome()
 // so the layer-host can implement the "click empty ocean → reset globe" feature.
+//
+// The controller does NOT know about gameplay layers or data sources — those
+// are mounted by the layer-host after the map loads.
 // ---------------------------------------------------------------------------
 
 import maplibregl from "maplibre-gl";
@@ -22,6 +22,7 @@ import { feature } from "topojson-client";
 // 110m resolution (108 KB) instead of 10m (3.5 MB) — plenty for globe zoom 0-8,
 // saves ~3.4 MB of inlined JSON from the dynamic map chunk.
 import worldTopo from "world-atlas/countries-110m.json";
+import { buildRasterSource, buildVectorSource } from "./tile-provider";
 
 // ---- Static world data (computed once at module scope) ----
 const worldFeat = feature(
@@ -34,27 +35,6 @@ const oceanFeature: GeoJSON.Feature = {
   properties: {},
   geometry: { type: "Polygon", coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] },
 };
-
-// ---- Graticule (lat/long grid) — generated once, adds the tactical ----
-// command-center grid feel without any external tiles. Meridians + parallels
-// every 30°. Cheap static GeoJSON (~24 line features).
-function buildGraticule(): GeoJSON.FeatureCollection {
-  const lines: GeoJSON.Feature[] = [];
-  // Meridians (longitude lines) every 30° from -180..180.
-  for (let lng = -180; lng <= 180; lng += 30) {
-    const coords: number[][] = [];
-    for (let lat = -85; lat <= 85; lat += 5) coords.push([lng, lat]);
-    lines.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-  }
-  // Parallels (latitude lines) every 30° from -90..90.
-  for (let lat = -90; lat <= 90; lat += 30) {
-    const coords: number[][] = [];
-    for (let lng = -180; lng <= 180; lng += 5) coords.push([lng, lat]);
-    lines.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-  }
-  return { type: "FeatureCollection", features: lines };
-}
-const graticule = buildGraticule();
 
 export interface CreateMapOptions {
   container: HTMLElement;
@@ -87,54 +67,82 @@ export function createMap(opts: CreateMapOptions): MapController {
     pitch: 0,
   };
 
+  // Vector tile source (roads/buildings/water/landuse). Null on Esri
+  // (satellite-only provider) — roads/buildings layers skip mounting.
+  const vectorSource = buildVectorSource();
+  // Raster satellite source — the actual base imagery (Esri World Imagery
+  // by default). This is what makes the globe VISIBLE instead of near-black.
+  const rasterSource = buildRasterSource();
+
   const map = new maplibregl.Map({
     container,
     style: {
       version: 8,
       projection: { type: "globe" } as never,
       sources: {
-        // Pure local GeoJSON — zero external tile requests. Instant load,
-        // fully offline-capable, and keeps the strict monochromatic aesthetic.
-        ocean: { type: "geojson", data: { type: "FeatureCollection", features: [oceanFeature] } },
+        // Satellite raster tiles — the visible base layer.
+        satellite: rasterSource,
         world: { type: "geojson", data: worldFeat as unknown as GeoJSON.GeoJSON },
-        graticule: { type: "geojson", data: graticule },
+        ocean: { type: "geojson", data: { type: "FeatureCollection", features: [oceanFeature] } },
+        ...(vectorSource ? { "vector-tiles": vectorSource } : {}),
       },
       layers: [
-        // ---- Solid dark ocean (BOTTOM — the void / "space" backdrop) ----
-        // Fully opaque so the globe reads as a dark sphere, not a transparent
-        // canvas. This is what makes the globe visibly present without any
-        // satellite imagery.
+        // ---- Satellite imagery base (BOTTOM layer — the visible globe) ----
+        // Plain, un-styled satellite tiles — no desaturation, no darkening,
+        // no contrast shift. The imagery is shown exactly as the tile provider
+        // delivers it.
+        { id: "satellite-base", type: "raster", source: "satellite" },
+
+        // ---- Solid dark ocean base (transparent — satellite shows oceans) ----
+        // Kept as a fallback: if satellite tiles are still loading or fail,
+        // the ocean fill provides a dark backdrop. Opacity 0 once tiles arrive
+        // (satellite already renders ocean imagery).
         { id: "ocean-fill", type: "fill", source: "ocean", paint: {
-          "fill-color": "#050507",
-          "fill-opacity": 1.0,
+          "fill-color": "#050506",
+          "fill-opacity": 0.0,
         } },
 
-        // ---- Landmass silhouettes ----
-        // Slightly lighter than the ocean so continents read as dark shapes
-        // against the void. Subtle — keeps the monochrome cinematic tone.
+        // ---- Water bodies (rivers, lakes, harbors) from vector tiles ----
+        ...(vectorSource ? [{
+          id: "water-fill",
+          type: "fill" as const,
+          source: "vector-tiles",
+          "source-layer": "water",
+          paint: {
+            "fill-color": "#1a1a1f",
+            "fill-opacity": 0.3,
+          },
+        }] : []),
+
+        // ---- Landuse (parks, urban fabric) — subtle texture variation ----
+        ...(vectorSource ? [{
+          id: "landuse-fill",
+          type: "fill" as const,
+          source: "vector-tiles",
+          "source-layer": "landuse",
+          paint: {
+            "fill-color": "#0a0a0c",
+            "fill-opacity": 0.4,
+          },
+        }] : []),
+
+        // ---- Country outlines (globe/region zoom only) ----
+        // White outlines on top of the satellite imagery for geopolitical context.
+        // Fade out at region zoom so roads/buildings take over.
         { id: "countries-fill", type: "fill", source: "world", paint: {
-          "fill-color": "#0e0e12",
-          "fill-opacity": 1.0,
+          "fill-color": "#0a0a0a",
+          "fill-opacity": 0.0,
         } },
-
-        // ---- Graticule (lat/long grid) ----
-        // Faint white grid lines — the tactical command-center feel. Very low
-        // opacity so it reads as a display overlay, not clutter. Fades out at
-        // high zoom so it never competes with gameplay markers.
-        { id: "graticule-line", type: "line", source: "graticule", paint: {
-          "line-color": "#ffffff",
-          "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.07, 4, 0.05, 8, 0.0],
-          "line-width": 0.4,
-        } },
-
-        // ---- Country outlines ----
-        // White outlines for geopolitical context. Clearly visible at globe
-        // zoom, fade out approaching street zoom so gameplay markers dominate.
-        { id: "countries-line", type: "line", source: "world", paint: {
-          "line-color": "#ffffff",
-          "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.42, 4, 0.38, 8, 0.10],
-          "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 2, 0.8, 4, 1.0],
-        } },
+        {
+          id: "countries-line",
+          type: "line",
+          source: "world",
+          paint: {
+            "line-color": "#ffffff",
+            "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.35, 4, 0.30, 8, 0.0],
+            "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 2, 0.7, 4, 0.9],
+          },
+        },
       ],
     },
     center,
