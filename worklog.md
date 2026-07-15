@@ -1826,3 +1826,24 @@ Stage Summary:
 - Double-click now zooms 3 levels (not 1) centered on the click point — fast navigation into street view.
 - Single-click and double-click are properly disambiguated via a 250ms delay: double-click ONLY zooms, single-click ONLY deselects/resets.
 - The auto-pitch (50° at zoom 9+) still engages correctly after double-click zoom crosses the threshold.
+
+---
+Task ID: CHECKPOINT-SESSION-4
+Agent: main (Z.ai Code)
+Task: Save everything to repo; establish THIS build as the only canonical checkpoint; remove all other local version tags.
+
+Work Log:
+- Verified working tree clean (git status --porcelain empty) — all session edits already committed.
+- Confirmed session edits present in HEAD (f6be9cf):
+  - map-controller.ts: `zoom = 1.584` (1% zoom-out), `SPIN_LNG_DELTA = 0.06` + `map.jumpTo({center})` (globe spins on axis, right-to-left surface drift, zoom < 9 gate)
+  - layer-host.tsx: `isMapReady()` guard (`!!map.style && !map._removed`) applied to source subscription (line 70) and animate loop (line 199) — fixes "this.style is undefined" TypeError on unmount race
+- Deleted stale local tags: `checkpoint-canonical` (was 8f714db → commit a283a21, old Jul-15 checkpoint) and `base` (was c249fc7, old Jul-11 checkpoint).
+- Recreated `checkpoint-canonical` as annotated tag pointing at HEAD commit f6be9cf32412e8a33a39e900854e4d2afbe3dbc5.
+- Verified: `git rev-parse checkpoint-canonical^{commit}` == `git rev-parse HEAD` → ✅ match.
+- Only ONE local version tag remains: `checkpoint-canonical`. No `base`, no other checkpoints.
+
+Stage Summary:
+- Canonical checkpoint = commit f6be9cf (tag: checkpoint-canonical).
+- This is the ONLY valid restore point. To recover: `git checkout checkpoint-canonical`.
+- Session work captured: (1) globe auto-spin on axis via center-longitude drift (right-to-left, westward surface motion, gated to zoom < 9), (2) starting zoom reduced 1% from 1.6 to 1.584, (3) LayerHost isMapReady() guard fixing the unmount-race TypeError that crashed outposts.layer.ts onData → map.getSource.
+- Build verified: lint clean (0 errors, 0 warnings), dev server compiles, page loads 200, no runtime/console errors, globe renders with auto-spin + dark night-Earth styling + 3D buildings + gesture controls.
