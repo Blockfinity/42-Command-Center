@@ -22,7 +22,7 @@
 import * as React from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type maplibregl from "maplibre-gl";
-import { Plus, Minus, Maximize2 } from "lucide-react";
+import { Plus, Minus, Eye } from "lucide-react";
 import { useCommand } from "@/stores/command";
 import { createMap, type MapController } from "./map-controller";
 import { LayerHost } from "./layer-host";
@@ -130,15 +130,27 @@ export function MapView({
   }, [state]);
 
   // ---- Zoom controls (always visible — Google Earth-like) ----
+  // Each zoom button also corrects pitch: tilt to 50° past zoom 9 so 3D
+  // buildings show as boxes, flatten to 0° below zoom 9. This runs IN
+  // ADDITION to the map-controller's zoomend auto-pitch, so the pitch
+  // engages immediately on button press (not delayed until zoomend fires).
   const zoomIn = React.useCallback(() => {
     if (!map) return;
     (map as unknown as { _controller?: MapController })._controller?.pauseAutoRotate(800);
     map.zoomIn({ duration: 500 });
+    const targetZoom = map.getZoom() + 1;
+    if (targetZoom >= 9 && map.getPitch() < 35) {
+      window.setTimeout(() => map.easeTo({ pitch: 50, duration: 600 }), 520);
+    }
   }, [map]);
   const zoomOut = React.useCallback(() => {
     if (!map) return;
     (map as unknown as { _controller?: MapController })._controller?.pauseAutoRotate(800);
     map.zoomOut({ duration: 500 });
+    const targetZoom = map.getZoom() - 1;
+    if (targetZoom < 9 && map.getPitch() > 15) {
+      window.setTimeout(() => map.easeTo({ pitch: 0, duration: 600 }), 520);
+    }
   }, [map]);
   const resetView = React.useCallback(() => {
     if (!map) return;
@@ -169,8 +181,18 @@ export function MapView({
       {/* Unit info panel — floating left-center, shown whenever a unit is selected */}
       <UnitInfoPanel garrison={selectedGarrison} visible={!!selectedGarrison} />
 
-      {/* Zoom controls — bottom-right, always visible (Google Earth-like) */}
+      {/* Zoom controls — bottom-right, always visible (Google Earth-like).
+          Eye (reset to home) sits ABOVE the + button so it's the first thing
+          the user reaches for when they've zoomed/panned away from the start. */}
       <div className="pointer-events-auto absolute bottom-8 right-4 z-20 flex flex-col gap-1">
+        <button
+          onClick={resetView}
+          aria-label="Reset view to home"
+          title="Reset to starting position"
+          className="flex h-8 w-8 items-center justify-center border border-white/25 bg-black/80 text-white/85 backdrop-blur transition-colors hover:bg-white/15 hover:text-white"
+        >
+          <Eye className="h-4 w-4" />
+        </button>
         <button
           onClick={zoomIn}
           aria-label="Zoom in"
@@ -184,13 +206,6 @@ export function MapView({
           className="flex h-8 w-8 items-center justify-center border border-white/25 bg-black/80 text-white/85 backdrop-blur transition-colors hover:bg-white/15 hover:text-white"
         >
           <Minus className="h-4 w-4" />
-        </button>
-        <button
-          onClick={resetView}
-          aria-label="Reset view"
-          className="flex h-8 w-8 items-center justify-center border border-white/25 bg-black/80 text-white/85 backdrop-blur transition-colors hover:bg-white/15 hover:text-white"
-        >
-          <Maximize2 className="h-3.5 w-3.5" />
         </button>
       </div>
 

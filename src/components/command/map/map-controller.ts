@@ -163,30 +163,34 @@ export function createMap(opts: CreateMapOptions): MapController {
     dragRotate: true,
     scrollZoom: true,
     touchZoomRotate: true,
-    doubleClickZoom: true,
+    // Disabled: double-click zoom was causing the "clicking outside the globe
+    // zooms in" issue. The eye/reset-view button provides intentional reset.
+    doubleClickZoom: false,
     antialias: true,
   });
 
   // ---- Auto-pitch: ease to isometric (50°) when zooming into city level ----
   // Continuous Google Earth-like experience: flat globe at low zoom, tilts
-  // to isometric 3D cityscape as you zoom into streets. Smooth threshold
-  // crossing so it doesn't fight mid-zoom user rotation.
-  let lastPitchState: "flat" | "tilted" = "flat";
-  const onZoom = () => {
+  // to isometric 3D cityscape as you zoom into streets.
+  //
+  // ROBUST against cancelled animations: instead of tracking state transitions
+  // (which breaks when a rapid zoomIn() cancels a mid-flight pitch easeTo,
+  // leaving the pitch stuck at an intermediate value), we check the ACTUAL
+  // pitch against the target on every zoomend. If they're significantly off,
+  // we re-ease. The 15° threshold avoids fighting manual dragRotate adjustments.
+  const PITCH_TILT_ZOOM = 9;     // zoom threshold: tilt at 9+
+  const PITCH_TILTED = 50;       // target pitch when tilted
+  const PITCH_FLAT = 0;          // target pitch when flat
+  const PITCH_THRESHOLD = 15;    // re-ease if |actual - target| > this
+  const onZoomEnd = () => {
     const z = map.getZoom();
     const p = map.getPitch();
-    // Start tilting at zoom 8 (region level), full tilt by zoom 12.
-    const wantTilt = z >= 9;
-    const state: "flat" | "tilted" = wantTilt ? "tilted" : "flat";
-    if (state === lastPitchState) return;
-    lastPitchState = state;
-    if (wantTilt && p < 30) {
-      map.easeTo({ pitch: 50, duration: 800 });
-    } else if (!wantTilt && p > 30) {
-      map.easeTo({ pitch: 0, duration: 800 });
+    const target = z >= PITCH_TILT_ZOOM ? PITCH_TILTED : PITCH_FLAT;
+    if (Math.abs(p - target) > PITCH_THRESHOLD) {
+      map.easeTo({ pitch: target, duration: 600 });
     }
   };
-  map.on("zoomend", onZoom);
+  map.on("zoomend", onZoomEnd);
 
   // ---- Auto-rotate loop (pauses 3.5s after user interaction) ----
   // Throttled to ~20fps and gated on document visibility to avoid wasted
@@ -229,8 +233,8 @@ export function createMap(opts: CreateMapOptions): MapController {
     // NOTE: do NOT call map.stop() — calling stop() in the same tick as easeTo
     // prevents the ease from starting (MapLibre quirk).
     pauseAutoRotate(3500);
-    // Reset auto-pitch tracking so zooming back in re-engages isometric view.
-    lastPitchState = "flat";
+    // Ease back to home camera (center/zoom/bearing/pitch=0). The zoomend
+    // auto-pitch handler will keep pitch at 0 since home zoom < 9.
     map.easeTo({
       center: homeCamera.center,
       zoom: homeCamera.zoom,
@@ -242,7 +246,7 @@ export function createMap(opts: CreateMapOptions): MapController {
 
   const destroy = () => {
     if (rafId !== null) cancelAnimationFrame(rafId);
-    map.off("zoomend", onZoom);
+    map.off("zoomend", onZoomEnd);
     container.removeEventListener("pointerdown", onInteract);
     container.removeEventListener("wheel", onInteract);
     container.removeEventListener("touchstart", onInteract);
