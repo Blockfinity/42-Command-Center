@@ -218,9 +218,21 @@ export function createMap(opts: CreateMapOptions): MapController {
   };
   map.on("zoomend", onZoomEnd);
 
-  // ---- Auto-rotate loop (pauses 3.5s after user interaction) ----
+  // ---- Auto-spin loop (pauses 3.5s after user interaction) ----
+  // SPIN ON AXIS, not view rotation. We shift the center longitude eastward
+  // over time so the visible surface drifts westward (right → left) under a
+  // fixed camera — the planet rotates on its axis. This is fundamentally
+  // different from setBearing, which rotates the whole view like clock hands
+  // sweeping around the dial.
+  //
   // Throttled to ~20fps and gated on document visibility to avoid wasted
   // GPU repaints when the tab is hidden or the user is interacting.
+  //
+  // Only spins at globe/region zoom (zoom < 9). At city/street zoom, panning
+  // the center would teleport the view and fight user exploration, so we
+  // skip it — the auto-pitch handler keeps the 3D cityscape steady.
+  const SPIN_ZOOM_MAX = 9;
+  const SPIN_LNG_DELTA = 0.06; // degrees eastward per tick → surface drifts west
   let lastInteract = performance.now();
   let rafId: number | null = null;
   let pauseUntil = 0;
@@ -241,11 +253,23 @@ export function createMap(opts: CreateMapOptions): MapController {
     if (now - lastRotateTick >= ROTATE_INTERVAL_MS) {
       lastRotateTick = now;
       if (now - lastInteract > 3500 && now > pauseUntil) {
-        // setBearing is cheaper than jumpTo (no camera recomputation overhead).
-        // Negative delta = clockwise rotation when viewed from above the North
-        // Pole, which makes the visible surface drift from right to left on
-        // its axis (westward) — the natural "spinning globe" feel.
-        map.setBearing(map.getBearing() - 0.06);
+        // Only spin when looking at the globe/region. At city zoom the user
+        // is exploring — auto-panning would be disorienting.
+        if (map.getZoom() < SPIN_ZOOM_MAX) {
+          const c = map.getCenter();
+          // Incrementing longitude = camera drifts east = surface drifts
+          // west (right → left) across the visible disk. Normalize to
+          // [-180, 180] so the value doesn't grow unbounded over long
+          // sessions (MapLibre handles wrapping in rendering, but keeping
+          // the stored value bounded is cleaner).
+          const newLng = c.lng + SPIN_LNG_DELTA;
+          const wrappedLng = ((newLng + 180) % 360 + 360) % 360 - 180;
+          // jumpTo = instant set, no animation. At 20fps with a 0.06° delta
+          // the motion reads as smooth continuous spin (same visual cadence
+          // as the old setBearing approach, just translating instead of
+          // rotating the view).
+          map.jumpTo({ center: [wrappedLng, c.lat] });
+        }
       }
     }
     rafId = requestAnimationFrame(rotateLoop);
