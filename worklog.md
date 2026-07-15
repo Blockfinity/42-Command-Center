@@ -1645,3 +1645,58 @@ Stage Summary:
 - Initial JS payload reduced via GarrisonDetailCard code-split + lucide-react optimizePackageImports + dead code deletion (699 lines removed).
 - Grid overlay no longer obscures the map (opacity 60→20).
 - Build config hardened: no source maps in prod, no powered-by header, no ignored type errors.
+
+---
+Task ID: PERF-2
+Agent: Z.ai Code (main session)
+Task: The preview was showing a photorealistic satellite globe instead of the intended monochromatic command-center build. Restore the documented "monochromatic black & white, futuristic, cinematic" aesthetic while keeping the globe visible and all PERF-1 optimizations intact.
+
+Root cause:
+- PERF-1 (task 35d62e8) fixed the "invisible globe" problem by wiring up `buildRasterSource()` (Esri World Imagery satellite tiles) as the base layer. This made the globe VISIBLE but in the WRONG aesthetic — a photorealistic satellite Earth (green/brown continents, blue oceans) instead of the documented monochromatic command-center design.
+- The REAL reason the globe was invisible before PERF-1 was the 0-height container (MapLibre CSS not imported → `position: relative` overrode Tailwind's `absolute inset-0` → 0px height). PERF-1 already fixed that (CSS import + `h-full w-full`). The satellite tiles were a misguided addition that changed the aesthetic, not the actual visibility fix.
+
+Fix (2 files):
+1. map-controller.ts — rewrote the base style to be pure monochromatic local GeoJSON (zero external tile requests):
+   • REMOVED: `buildRasterSource` + `buildVectorSource` imports, the `satellite` source, the `satellite-base` raster layer, the conditional `vector-tiles` source, and the `water-fill`/`landuse-fill` vector layers (which were no-ops on the default Esri provider anyway).
+   • ADDED: a generated graticule (lat/long grid every 30°) as a third local GeoJSON source — adds the tactical command-center grid feel with zero network cost (~24 static LineString features).
+   • RESTORED monochromatic base layers:
+     - `ocean-fill`: solid `#050507`, fill-opacity 1.0 (was 0.0 under satellite) — the dark void/space backdrop.
+     - `countries-fill`: `#0e0e12`, fill-opacity 1.0 (was 0.0) — dark landmass silhouettes, slightly lighter than ocean so continents read.
+     - `graticule-line`: white, opacity ~0.07 at globe zoom fading to 0 by zoom 8 — the faint tactical grid.
+     - `countries-line`: white, opacity ~0.42 at globe zoom fading to 0.10 by zoom 8 — clearly visible country outlines.
+   • Updated the header comment to document the monochromatic command-center design (removed the stale "Google Earth / white roads / 3D buildings" SurveilTrack aspiration that required vector tiles).
+2. layout.tsx — removed the `<link rel="preconnect" href="https://server.arcgisonline.com">` + dns-prefetch (no more external tile requests → no tile server to preconnect to). The globe is now 100% local GeoJSON.
+
+KEPT all PERF-1 optimizations (untouched):
+- 110m world-atlas (108 KB, not 3.5 MB 10m) — the chunk-size fix.
+- `import "maplibre-gl/dist/maplibre-gl.css"` in map-view.tsx — the real visibility fix (container height).
+- `h-full w-full` container (not `absolute inset-0`) — works with MapLibre's `position: relative`.
+- rAF animate loop throttled to ~30fps + document.hidden gating (layer-host.tsx).
+- Auto-rotate throttled to ~20fps + document.hidden gating (map-controller.ts).
+- Map chunk prefetch on CommandDeck mount (command-deck.tsx).
+- GarrisonDetailCard code-split (next/dynamic).
+- next.config: optimizePackageImports (lucide-react), productionBrowserSourceMaps: false, poweredByHeader: false, no ignoreBuildErrors.
+- Grid overlay opacity 20 (not 60).
+
+Self-verification (agent-browser + VLM):
+- Boot screen → clicked ESTABLISH UPLINK → dashboard loaded cleanly. ✅
+- VLM on globe at zoom 1.6: "stylized monochromatic dark globe (dark/black background with white country outlines, no real photos)... country outlines (North America, South America) and a grid (latitude/longitude lines) are visible." ✅ NOT photorealistic.
+- Inspected map style via window.__map: layers = [ocean-fill, countries-fill, graticule-line, countries-line, territory-*, halos-*, ping-*, vectors-*, progress-*, garrison-*] — NO satellite-base, NO vector-tiles. sources = [ocean, world, graticule, territory-src, pings-src, missions-src, garrisons-src] — all local. ✅
+- Network: performance.getEntriesByType('resource') filtered for arcgis/maptiler/pbf/tile/satellite → `[]` (ZERO external tile requests). The globe is fully offline-capable. ✅
+- Container height: 577px (visibility fix intact). ✅
+- Garrison data flow: garrisons-src.serialize().data.features.length = 16 (all garrisons loaded from /api/state). ✅
+- Garrison markers render: paused auto-rotate, flew to NYC zoom 7 → queryRenderedFeatures({layers:[garrison-square,...]}) = 2 markers, hasImage('street-marker') = true. ✅
+- VLM at zoom 7: "monochromatic dark with white outlines (not satellite imagery)... small white square marker (garrison marker) labeled FNG-6644-NYC is visible." ✅
+- agent-browser errors → none. agent-browser console → only React DevTools info + HMR. ✅
+
+Lint + commit:
+- bun run lint → 0 errors, 0 warnings.
+- Committed + pushed.
+
+Stage Summary:
+- The globe now shows the intended monochromatic command-center aesthetic: solid dark ocean void, dark landmass silhouettes, faint white graticule grid, clearly visible white country outlines. NOT photorealistic satellite imagery.
+- The globe is fully visible (the real fix — container height + MapLibre CSS — was already in place from PERF-1 and is retained).
+- The globe loads with ZERO external network requests (pure local GeoJSON: world-atlas 110m + generated graticule). Faster than the satellite version, fully offline-capable, and aesthetically correct.
+- All PERF-1 optimizations retained: 110m world-atlas, rAF throttle, auto-rotate throttle, visibility gating, map chunk prefetch, GarrisonDetailCard code-split, build config hardening.
+- All gameplay layers (territory, pings, missions, garrisons) render on top of the monochromatic base — confirmed garrison markers visible at street zoom with unit codes (e.g. "FNG-6644-NYC").
+- The tile-provider.ts file remains in the tree (harmless, provides swappable architecture for future vector/raster tile providers) but is no longer imported by map-controller.
