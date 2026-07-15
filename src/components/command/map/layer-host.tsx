@@ -39,6 +39,17 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
     let rafId: number | null = null;
     let mounted = true;
 
+    // ---- Map readiness guard ----
+    // MapLibre throws "can't access property X, this.style is undefined" if
+    // you call getSource/getLayer/setPaintProperty/etc. after map.remove()
+    // has run (style is nulled) or before the style has loaded. During
+    // unmount there's a race: map-controller.destroy() calls map.remove(),
+    // but this effect's cleanup (unsubscribe + stopAll) runs slightly later.
+    // Any source emission in that window would crash onData. This guard
+    // protects ALL layers from that race — no per-layer try/catch needed.
+    const isMapReady = (): boolean =>
+      !!map.style && !(map as unknown as { _removed?: boolean })._removed;
+
     const onReady = () => {
       if (!mounted) return;
 
@@ -53,6 +64,10 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
       // 2. Subscribe to source events → route to layers.
       const unsubscribe = sourceRegistry.subscribe((event: NormalizedEvent) => {
         if (event.type === "source:set") {
+          // Guard: skip if the map has been removed or style isn't ready.
+          // This is the root-cause fix for the "this.style is undefined"
+          // crash that happened during unmount races.
+          if (!isMapReady()) return;
           for (const layer of LAYERS) {
             if (layer.sourceIds.includes(event.sourceId)) {
               layer.onData?.(map, event.sourceId, event.data);
@@ -178,8 +193,13 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         const now = performance.now();
         if (now - lastAnimateTick >= ANIMATE_INTERVAL_MS) {
           lastAnimateTick = now;
-          for (const layer of LAYERS) {
-            layer.animate?.(map, now);
+          // Guard: skip animate() calls if the map has been removed. Some
+          // layers (outposts) wrap their paint calls in try/catch, but not
+          // all do — this central guard protects every layer uniformly.
+          if (isMapReady()) {
+            for (const layer of LAYERS) {
+              layer.animate?.(map, now);
+            }
           }
         }
         rafId = requestAnimationFrame(animateLoop);
