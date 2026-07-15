@@ -242,7 +242,10 @@ export function createMap(opts: CreateMapOptions): MapController {
       lastRotateTick = now;
       if (now - lastInteract > 3500 && now > pauseUntil) {
         // setBearing is cheaper than jumpTo (no camera recomputation overhead).
-        map.setBearing(map.getBearing() + 0.06);
+        // Negative delta = clockwise rotation when viewed from above the North
+        // Pole, which makes the visible surface drift from right to left on
+        // its axis (westward) — the natural "spinning globe" feel.
+        map.setBearing(map.getBearing() - 0.06);
       }
     }
     rafId = requestAnimationFrame(rotateLoop);
