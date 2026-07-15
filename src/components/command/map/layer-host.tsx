@@ -65,43 +65,65 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
       sourceRegistry.startAll();
 
       // 4. Single click handler — dispatches to layer onClick() in order.
+      //
+      // CLICK VS DOUBLE-CLICK DISAMBIGUATION:
+      // A 250ms delay distinguishes single from double clicks. The pending
+      // single-click is cancelled if a dblclick arrives within 250ms — so
+      // double-clicking ONLY triggers the 3x zoom (map-controller's onDblClick),
+      // never the deselect/reset logic. Without this, every double-click would
+      // fire two single-clicks (deselect + reset) before the zoom, fighting it.
+      let clickTimer: ReturnType<typeof setTimeout> | null = null;
+      const CLICK_DELAY_MS = 250;
+
       const onClick = (e: maplibregl.MapMouseEvent & { features?: unknown[] }) => {
-        const ctx = { interaction: interactionRef.current };
-        // Let each layer try to handle the click. If a layer calls
-        // e.preventDefault(), subsequent layers skip.
-        let handled = false;
-        for (const layer of LAYERS) {
-          if (handled) break;
-          if (!layer.onClick) continue;
-          // Create a wrapper event that tracks preventDefault.
-          let prevented = false;
-          const wrappedE = {
-            ...e,
-            preventDefault: () => { prevented = true; },
-          };
-          layer.onClick(map, wrappedE as never, ctx);
-          if (prevented) {
-            handled = true;
-            break;
-          }
+        // If a previous click is pending, this is a double-click — cancel the
+        // pending single-click and let the dblclick handler (3x zoom) take over.
+        if (clickTimer !== null) {
+          clearTimeout(clickTimer);
+          clickTimer = null;
+          return;
         }
-        // If no layer handled it → empty-ocean / empty-ground click.
-        if (!handled) {
-          const intr = interactionRef.current;
-          if (intr.placementMode) {
-            intr.onMapClick(e.lngLat.lat, e.lngLat.lng);
-          } else {
-            // Deselect the active garrison (if any).
-            intr.onSelect(null);
-            // Globe reset (ease back to home) — only at low zoom. At street
-            // zoom, clicking empty ground just deselects; resetting the camera
-            // all the way to globe view would be disorienting.
-            if (map.getZoom() < 10) {
-              const controller = (map as unknown as { _controller?: { resetHome: () => void } })._controller;
-              controller?.resetHome();
+        // Schedule the single-click logic after a short delay. If a second
+        // click arrives before the delay expires, it's cancelled above.
+        clickTimer = setTimeout(() => {
+          clickTimer = null;
+          const ctx = { interaction: interactionRef.current };
+          // Let each layer try to handle the click. If a layer calls
+          // e.preventDefault(), subsequent layers skip.
+          let handled = false;
+          for (const layer of LAYERS) {
+            if (handled) break;
+            if (!layer.onClick) continue;
+            // Create a wrapper event that tracks preventDefault.
+            let prevented = false;
+            const wrappedE = {
+              ...e,
+              preventDefault: () => { prevented = true; },
+            };
+            layer.onClick(map, wrappedE as never, ctx);
+            if (prevented) {
+              handled = true;
+              break;
             }
           }
-        }
+          // If no layer handled it → empty-ocean / empty-ground click.
+          if (!handled) {
+            const intr = interactionRef.current;
+            if (intr.placementMode) {
+              intr.onMapClick(e.lngLat.lat, e.lngLat.lng);
+            } else {
+              // Deselect the active garrison (if any).
+              intr.onSelect(null);
+              // Globe reset (ease back to home) — only at low zoom. At street
+              // zoom, clicking empty ground just deselects; resetting the camera
+              // all the way to globe view would be disorienting.
+              if (map.getZoom() < 10) {
+                const controller = (map as unknown as { _controller?: { resetHome: () => void } })._controller;
+                controller?.resetHome();
+              }
+            }
+          }
+        }, CLICK_DELAY_MS);
       };
       map.on("click", onClick);
 
@@ -167,6 +189,7 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
       // Cleanup
       return () => {
         if (rafId !== null) cancelAnimationFrame(rafId);
+        if (clickTimer !== null) clearTimeout(clickTimer);
         map.off("click", onClick);
         map.off("move", onMove);
         ["garrison-square", "garrison-code", "garrison-select", "garrison-hitbox", "garrison-clusters"].forEach((layerId) => {

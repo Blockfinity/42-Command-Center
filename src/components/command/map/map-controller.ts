@@ -156,18 +156,44 @@ export function createMap(opts: CreateMapOptions): MapController {
     zoom,
     maxZoom: 18,
     minZoom: 0,
-    maxPitch: 70,
+    // Max pitch 80° allows dramatic 3D cityscape views when zoomed in —
+    // gives the full Google-Earth-style oblique perspective for 3D buildings.
+    maxPitch: 80,
     bearing: 0,
     pitch: 0,
     attributionControl: false,
+    // Gesture controls — all enabled so the user can rotate/tilt/pan freely
+    // at any zoom level. Right-click drag (or Ctrl+drag) rotates; two-finger
+    // trackpad / pinch rotates + tilts on touch devices.
     dragRotate: true,
+    dragPan: true,
     scrollZoom: true,
     touchZoomRotate: true,
-    // Disabled: double-click zoom was causing the "clicking outside the globe
-    // zooms in" issue. The eye/reset-view button provides intentional reset.
+    touchPitch: true,
+    keyboard: true,
+    // Built-in double-click zoom is DISABLED — we use a custom dblclick
+    // handler below that zooms 3 levels (not the default 1) centered on the
+    // click point.
     doubleClickZoom: false,
     antialias: true,
   });
+
+  // ---- Custom double-click: zoom 3 levels toward the click point ----
+  // MapLibre's built-in doubleClickZoom only jumps 1 zoom level. The user
+  // wants double-click to zoom in 3x for fast navigation. We keep the click
+  // point as the zoom center (like the built-in) and ease smoothly. Pauses
+  // auto-rotate so it doesn't fight the zoom animation.
+  const onDblClick = (e: maplibregl.MapMouseEvent) => {
+    pauseAutoRotate(1500);
+    const current = map.getZoom();
+    const target = Math.min(current + 3, 18);
+    map.easeTo({
+      center: e.lngLat,
+      zoom: target,
+      duration: 600,
+    });
+  };
+  map.on("dblclick", onDblClick);
 
   // ---- Auto-pitch: ease to isometric (50°) when zooming into city level ----
   // Continuous Google Earth-like experience: flat globe at low zoom, tilts
@@ -247,6 +273,7 @@ export function createMap(opts: CreateMapOptions): MapController {
   const destroy = () => {
     if (rafId !== null) cancelAnimationFrame(rafId);
     map.off("zoomend", onZoomEnd);
+    map.off("dblclick", onDblClick);
     container.removeEventListener("pointerdown", onInteract);
     container.removeEventListener("wheel", onInteract);
     container.removeEventListener("touchstart", onInteract);
