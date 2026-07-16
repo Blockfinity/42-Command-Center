@@ -2140,3 +2140,70 @@ Stage Summary:
 - Fix: disabled clustering entirely, lowered all garrison marker minzooms to 0, extended icon-size + hitbox + selection-ring + pulse interpolations down to zoom 0, removed cluster layers, re-tuned click threshold to be generous at low zoom.
 - All 16 garrisons (friendly FANG + enemy HAMMER/RESOLUTE, Safehouse + Tactical) are now persistently visible at every zoom level — no appearing/disappearing.
 - Clicking any garrison (friendly or enemy) at any zoom level opens the quick-preview GarrisonDetailCard with the appropriate action set.
+
+---
+Task ID: STRIKE-PLAN-RESTORE
+Agent: Z.ai Code (main session)
+Task: User instruction: "review the conversation in depth so you understand what was green lit and what wasnt, the wallet strip at the header was removed, besides that integrate everything else, no enemy safehouse seeding, there should only be 3 factions, Hammer/Fang/Resolute nothing else, this should already be there, also do not use open map reconect maptiler". Rebuild the lost strike-plan work (strike-plan.ts, StrikeConsole guided rewrite, GarrisonDetailCard confirm flow, intel ledger) from the conversation history. Revert OpenFreeMap → MapTiler. Keep wallet strip out of header. No enemy safehouse seeding. Only 3 factions.
+
+Work Log:
+- Read the full conversation history (15,456 lines) + PRD PDF to understand what was green-lit vs reverted. Identified the lost work: strike-plan.ts (shared helpers), StrikeConsole focused 2-step guided rewrite, GarrisonDetailCard confirm buttons with auto-source-pick, intel ledger system. All were built in a prior session but never committed → destroyed by env reset.
+- Confirmed the wallet strip removal from header was green-lit (line 14781 of conversation) — left it removed.
+- Confirmed only 3 factions (FANG/HAMMER/RESOLUTE) — already in place, no changes needed.
+
+Fix 1 — Revert OpenFreeMap → MapTiler (tile-provider.ts, .env.local):
+- Removed the OpenFreeMap vector tile block from the "esri" default case. Esri now correctly returns null for vector tiles (satellite-only fallback).
+- Restored .env.local with NEXT_PUBLIC_MAP_TILE_PROVIDER=maptiler + NEXT_PUBLIC_MAPTILER_KEY=SwNgELHyIjlxY9NvJy98 (key from conversation line 7692). .env.local is gitignored.
+- MapTiler is now the active provider: satellite raster + vector tiles (roads + 3D buildings). Verified: 894 building-3d features at NYC zoom 14.
+
+Fix 2 — types.ts: wallet + intel ledger + currency system (+70 lines):
+- Added `wallet: { VOTC, FANG, HAMMER, RESOLUTE }` to Operative interface.
+- Added `IntelEntry` interface + `intel: IntelEntry[]` to GameState.
+- Added `CurrencyId` type + `missionCurrency()` helper: ATTACK → target faction token, DEFEND/RECON → own faction token, BUILD → VOTC.
+- Updated MISSION_META costs: BUILD 0→25 VOTC, DEFEND 0→15 (own token). RECON stays 12, ESPIONAGE 20, CYBER_ATTACK 30, DRONE_STRIKE 40.
+
+Fix 3 — NEW FILE src/lib/strike-plan.ts (189 lines):
+- `pickBestSource(state, targetId)` — haversine-closest eligible own garrison.
+- `listIntelTargets(state)` — rival garrisons revealed via intel ledger.
+- `missionCostLabel()`, `canAfford()`, `deductCost()`, `currencySymbol()` — currency-aware cost helpers.
+- Token economy: attack=enemy token, defend=own token, build=VOTC.
+
+Fix 4 — Game engine: intel ledger + wallet accrual + cost deduction (logic.ts, state.ts, actions.ts):
+- state.ts: operative starts with wallet {VOTC:500, FANG:200, HAMMER:200, RESOLUTE:200}. Intel starts EMPTY (no enemy safehouse seeding).
+- logic.ts: `revealIntel()` + `pruneIntel()` (5min TTL) called from tick(). `accrueWallet()` — passive VOTC from compute + faction token from uptime. ESPIONAGE resolveMission calls revealIntel().
+- actions.ts: launch-mission now deducts cost from wallet via missionCurrency(). Returns error if unaffordable.
+- Fixed import bug: NETWORK_CURRENCY is in types.ts not factions.ts.
+
+Fix 5 — StrikeConsole rewrite (left-panel.tsx, +180 lines):
+- MODE 1 (mission list): step indicator "1/2", intel counter, mission profiles with currency-aware cost labels (TGT TOKEN / OWN TOKEN / VOTC), icons.
+- MODE 2 (armed attack): step indicator "2/2", back button, wallet strips for rival faction tokens, intel-driven target cards with stats (HULL/TFLOPS/UPTIME), CONFIRM button with cost + auto-source-pick, disabled state with warnings (NO SOURCE / INSUFFICIENT FUNDS).
+- Empty state: "NO INTEL TARGETS REVEALED" + ARM ESPIONAGE button.
+- WalletStrip helper component.
+
+Fix 6 — GarrisonDetailCard ActionList rewrite (outpost-detail-card.tsx, +100 lines):
+- Rival garrisons: WalletStrip (target faction token), 3 CONFIRM buttons (DRONE STRIKE/CYBER/ESPIONAGE) with cost + auto-source-pick, disabled when unaffordable or no source.
+- Own garrisons: WalletStrip (VOTC + own faction token), BUILD costs VOTC, DEFEND/RECON cost own faction token, UPGRADE uses buildPoints.
+
+Fix 7 — /api/state IPv6 fix (route.ts):
+- Changed `fetch("http://localhost:3003/state")` → `fetch("http://127.0.0.1:3003/state")` to avoid IPv6 ::1 resolution failure (bun engine listens on IPv4 only).
+
+Self-verification (agent-browser via Caddy port 81):
+- ✅ Boot screen → ESTABLISH UPLINK → command deck renders (map + nodes + globe).
+- ✅ MapTiler vector tiles connected: 894 buildings-3d + 3268 buildings-top + 3379 roads at NYC zoom 14 pitch 50.
+- ✅ Wallet live: VOTC=500, FANG=200, HAMMER=200, RESOLUTE=200 (accruing passively).
+- ✅ Intel ledger starts at 0 (no enemy safehouse seeding).
+- ✅ StrikeConsole MODE 1: 6 mission profiles with currency-aware costs (TGT TOKEN/OWN TOKEN/VOTC).
+- ✅ Clicked CONFIRM ESPIONAGE on Hammer Anvil → wallet HAMMER 200→180 (−20 cost), ESPIONAGE mission launched (Fang Prime → Hammer Anvil).
+- ✅ After 22s ESPIONAGE completed → intel ledger populated with 3 entries (including FANG's intel on HAMMER target).
+- ✅ StrikeConsole MODE 2 (DRONE STRIKE armed): "INTEL TARGETS · REVEALED", Hammer Anvil visible as target card with CONFIRM DRONE STRIKE button + auto-source.
+- ✅ GarrisonDetailCard rival: CONFIRM DRONE STRIKE/CYBER/ESPIONAGE buttons with "20 HAMMER · 22s" cost labels, HAMMER TOKEN wallet strip, AUTO-SOURCE indicator.
+- ✅ Lint: 0 errors, 0 warnings. src/ line count: 16,618 → 17,176 (+558).
+
+Stage Summary:
+- The lost strike-plan work is fully rebuilt: strike-plan.ts + StrikeConsole 2-step guided flow + GarrisonDetailCard confirm-with-auto-source + intel ledger. All browser-verified end-to-end.
+- Token economy enforced: attack costs target faction token, defend costs own faction token, build costs VOTC. Wallet accrues passively.
+- Intel ledger starts empty (NO enemy safehouse seeding), fills organically via ESPIONAGE missions, TTL-pruned after 5 minutes.
+- OpenFreeMap removed. MapTiler restored as the active tile provider (key in .env.local, gitignored). 3D buildings render with MapTiler vector tiles.
+- Wallet strip remains removed from the header (per prior green-lit decision).
+- Only 3 factions: FANG / HAMMER / RESOLUTE.
+- Engine started with `bun run index.ts` (no --hot) via double-fork to prevent hot-reload crashes. Fixed /api/state IPv6 resolution bug.

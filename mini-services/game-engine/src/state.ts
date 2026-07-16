@@ -102,10 +102,21 @@ export function buildInitialState(): GameState {
       tier: "ELITE",
       faction: "FANG",
       authority: 72,
+      // Starting wallet — enough to launch a few strikes + builds. Accrues
+      // passively from garrison uptime (see accrueWallet in logic.ts).
+      wallet: {
+        VOTC: 500,
+        FANG: 200,
+        HAMMER: 200,
+        RESOLUTE: 200,
+      },
     },
     territories,
     activityPings: [],
     networkLoad: 1.4,
     totalActions: 847_000_000,
+    // Intel ledger starts EMPTY — no enemy safehouse seeding. Fills
+    // organically as the operative runs ESPIONAGE missions against rivals.
+    intel: [],
   };
 }

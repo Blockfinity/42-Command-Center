@@ -12,11 +12,19 @@ import {
   type FactionId,
   type GarrisonBrief,
   type GarrisonBriefPriority,
+  type CurrencyId,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useSfx } from "@/hooks/use-sfx";
 import { Crosshair, Zap, Eye, Shield, Satellite, Hammer, X, Radio, Loader2 } from "lucide-react";
 import { FACTION_LOGO } from "@/lib/factions";
+import {
+  pickBestSource,
+  missionCostLabel,
+  missionCostCurrency,
+  canAfford,
+  currencySymbol,
+} from "@/lib/strike-plan";
 
 /**
  * Priority → badge styling (monochrome intensity).
@@ -202,68 +210,155 @@ function ActionList({ garrison }: { garrison: Garrison }) {
 
   if (!state) return null;
   const isMine = garrison.faction === state.operative.faction;
+  const myFaction = state.operative.faction;
   const upgradeCost = 50 + garrison.level * 25;
-  const buildCost = 40 + garrison.level * 20;
+
+  // ── Rival garrison: confirm buttons with cost + auto-source-pick ──────
+  // Each attack auto-picks the closest eligible own garrison and commits
+  // immediately — no source-picker dance. Shows currency-aware cost
+  // (target faction token) and disables with a warning if unaffordable
+  // or no eligible source exists.
+  if (!isMine) {
+    const source = pickBestSource(state, garrison.id);
+    const hasSource = source !== null;
+    const attackTypes: { type: "DRONE_STRIKE" | "CYBER_ATTACK" | "ESPIONAGE"; icon: typeof Crosshair }[] = [
+      { type: "DRONE_STRIKE", icon: Crosshair },
+      { type: "CYBER_ATTACK", icon: Zap },
+      { type: "ESPIONAGE", icon: Eye },
+    ];
+    // The currency all three attacks cost = target faction's token.
+    const tgtCurrency: CurrencyId = garrison.faction;
+    const tgtBalance = state.operative.wallet[tgtCurrency];
+
+    return (
+      <div className="space-y-2 p-4">
+        {/* WalletStrip — shows the target faction token balance */}
+        <div className="flex items-center justify-between border border-white/15 px-2 py-1 font-mono text-[9px] tracking-wide-2 text-white/60">
+          <span className="text-white/40">{garrison.faction} TOKEN</span>
+          <span>
+            {Math.floor(tgtBalance)} <span className="text-white/55">{currencySymbol(tgtCurrency)}</span>
+          </span>
+        </div>
+        {attackTypes.map(({ type, icon: Icon }) => {
+          const meta = MISSION_META[type];
+          const costLabel = missionCostLabel(type, myFaction, garrison);
+          const affordable = canAfford(state, type, garrison);
+          const canStrike = affordable && hasSource;
+          return (
+            <button
+              key={type}
+              disabled={!canStrike}
+              onClick={() => {
+                if (!source) return;
+                sendAction({
+                  kind: "launch-mission",
+                  missionType: type,
+                  sourceId: source.id,
+                  targetId: garrison.id,
+                });
+              }}
+              className={cn(
+                "flex w-full items-center justify-between border px-3 py-2 font-mono text-[10px] font-bold tracking-wide-2 transition-colors",
+                canStrike
+                  ? "border-white/30 text-white hover:border-white hover:bg-white/10"
+                  : "cursor-not-allowed border-white/10 text-white/30"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Icon size={12} strokeWidth={1.5} />
+                <span>CONFIRM {meta.label}</span>
+              </div>
+              <span className="text-white/60">
+                {costLabel} · {meta.duration}s
+              </span>
+            </button>
+          );
+        })}
+        {!hasSource && (
+          <div className="font-mono text-[9px] leading-snug text-white/35 blink">
+            ⚠ NO ELIGIBLE SOURCE GARRISON — DEPLOY MORE NODES
+          </div>
+        )}
+        {hasSource && tgtBalance < MISSION_META.DRONE_STRIKE.cost && (
+          <div className="font-mono text-[9px] leading-snug text-white/35 blink">
+            ⚠ INSUFFICIENT {currencySymbol(tgtCurrency)} — EARN MORE VIA COMBAT
+          </div>
+        )}
+        {hasSource && (
+          <div className="font-mono text-[9px] text-white/30">
+            AUTO-SOURCE: {source!.name}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Own garrison: reinforce/defend/recon/upgrade ─────────────────────
+  // BUILD costs VOTC (universal currency). DEFEND costs your faction token.
+  // RECON costs your faction token. UPGRADE uses garrison-local buildPoints.
+  const buildCost = MISSION_META.BUILD.cost; // VOTC
+  const defendCost = MISSION_META.DEFEND.cost; // own faction token
+  const reconCost = MISSION_META.RECON.cost; // own faction token
+  const votcBalance = state.operative.wallet.VOTC;
+  const ownTokenBalance = state.operative.wallet[myFaction];
+  const canBuild = votcBalance >= buildCost;
+  const canDefend = ownTokenBalance >= defendCost;
+  const canRecon = ownTokenBalance >= reconCost;
+  const canUpgrade = garrison.buildPoints >= upgradeCost;
 
   return (
     <div className="space-y-2 p-4">
-      {isMine ? (
-        <>
-          <ActionBtn
-            icon={Hammer}
-            label="REINFORCE (BUILD)"
-            meta={`+LV · ${buildCost} BP`}
-            disabled={garrison.buildPoints < buildCost}
-            onClick={() =>
-              sendAction({ kind: "launch-mission", missionType: "BUILD", sourceId: garrison.id, targetId: garrison.id })
-            }
-          />
-          <ActionBtn
-            icon={Shield}
-            label="RAISE SHIELDS (DEFEND)"
-            meta="+HULL · FREE"
-            onClick={() =>
-              sendAction({ kind: "launch-mission", missionType: "DEFEND", sourceId: garrison.id, targetId: garrison.id })
-            }
-          />
-          <ActionBtn
-            icon={Satellite}
-            label="ORBITAL RECON"
-            meta="+BP · FREE"
-            onClick={() =>
-              sendAction({ kind: "launch-mission", missionType: "RECON", sourceId: garrison.id, targetId: garrison.id })
-            }
-          />
-          <ActionBtn
-            icon={Hammer}
-            label={`UPGRADE TO LV ${garrison.level + 1}`}
-            meta={`${upgradeCost} BP`}
-            disabled={garrison.buildPoints < upgradeCost}
-            onClick={() => sendAction({ kind: "upgrade-garrison", id: garrison.id })}
-          />
-        </>
-      ) : (
-        <>
-          <ActionBtn
-            icon={Crosshair}
-            label="LAUNCH DRONE STRIKE"
-            meta={`${MISSION_META.DRONE_STRIKE.duration}s`}
-            onClick={() => setPending({ type: "DRONE_STRIKE", sourceId: null })}
-          />
-          <ActionBtn
-            icon={Zap}
-            label="CYBER ATTACK"
-            meta={`${MISSION_META.CYBER_ATTACK.duration}s`}
-            onClick={() => setPending({ type: "CYBER_ATTACK", sourceId: null })}
-          />
-          <ActionBtn
-            icon={Eye}
-            label="ESPIONAGE"
-            meta={`${MISSION_META.ESPIONAGE.duration}s`}
-            onClick={() => setPending({ type: "ESPIONAGE", sourceId: null })}
-          />
-        </>
-      )}
+      {/* WalletStrip — VOTC + own faction token */}
+      <div className="grid grid-cols-2 gap-1">
+        <div className={cn(
+          "flex items-center justify-between border px-2 py-1 font-mono text-[9px] tracking-wide-2",
+          canBuild ? "border-white/15 text-white/60" : "border-white/8 text-white/30"
+        )}>
+          <span className="text-white/40">VOTC</span>
+          <span>{Math.floor(votcBalance)}</span>
+        </div>
+        <div className={cn(
+          "flex items-center justify-between border px-2 py-1 font-mono text-[9px] tracking-wide-2",
+          canDefend || canRecon ? "border-white/15 text-white/60" : "border-white/8 text-white/30"
+        )}>
+          <span className="text-white/40">{currencySymbol(myFaction)}</span>
+          <span>{Math.floor(ownTokenBalance)}</span>
+        </div>
+      </div>
+      <ActionBtn
+        icon={Hammer}
+        label="REINFORCE (BUILD)"
+        meta={`${buildCost} ${NETWORK_CURRENCY}`}
+        disabled={!canBuild}
+        onClick={() =>
+          sendAction({ kind: "launch-mission", missionType: "BUILD", sourceId: garrison.id, targetId: garrison.id })
+        }
+      />
+      <ActionBtn
+        icon={Shield}
+        label="RAISE SHIELDS (DEFEND)"
+        meta={`${defendCost} ${currencySymbol(myFaction)}`}
+        disabled={!canDefend}
+        onClick={() =>
+          sendAction({ kind: "launch-mission", missionType: "DEFEND", sourceId: garrison.id, targetId: garrison.id })
+        }
+      />
+      <ActionBtn
+        icon={Satellite}
+        label="ORBITAL RECON"
+        meta={`${reconCost} ${currencySymbol(myFaction)}`}
+        disabled={!canRecon}
+        onClick={() =>
+          sendAction({ kind: "launch-mission", missionType: "RECON", sourceId: garrison.id, targetId: garrison.id })
+        }
+      />
+      <ActionBtn
+        icon={Hammer}
+        label={`UPGRADE TO LV ${garrison.level + 1}`}
+        meta={`${upgradeCost} BP`}
+        disabled={!canUpgrade}
+        onClick={() => sendAction({ kind: "upgrade-garrison", id: garrison.id })}
+      />
     </div>
   );
 }

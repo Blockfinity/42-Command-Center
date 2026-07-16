@@ -14,9 +14,12 @@ import {
   type ThreatLevel,
   FACTIONS,
   MISSION_META,
+  NETWORK_CURRENCY,
+  missionCurrency,
 } from "../../../src/lib/types";
 import { uid, now, clamp, pick } from "./state";
 import { pickWeightedPingType } from "./data";
+import { FACTION_TOKEN } from "../../../src/lib/factions";
 
 export const TICK_MS = 2000; // game loop cadence
 
@@ -261,9 +264,12 @@ export function resolveMission(state: GameState, m: Mission) {
     case "ESPIONAGE": {
       if (tgt) {
         state.factions[tgt.faction].threat = clamp(state.factions[tgt.faction].threat - 6);
+        // Reveal the target in the intel ledger — it now appears as a
+        // strikable target in the Strike Console.
+        revealIntel(state, tgt.id, m.faction, "ESPIONAGE");
         pushEvent(state, {
           type: "ESPIONAGE",
-          message: `Sleeper probes embedded in ${tgt.name}. Rival intent mapped.`,
+          message: `Sleeper probes embedded in ${tgt.name}. Rival intent mapped — intel acquired.`,
           severity: "INFO",
           faction: m.faction,
         });
@@ -317,6 +323,52 @@ export function resolveMission(state: GameState, m: Mission) {
   state.missions = state.missions.filter(
     (x) => x.status === "ACTIVE" || now() - x.startedAt < 60000
   );
+}
+
+// ===== Intel ledger =====
+// Intel TTL — revealed rivals expire after 5 minutes so the theatre reflects
+// only recently-scouted targets. The operative must keep running ESPIONAGE to
+// maintain visibility.
+const INTEL_TTL_MS = 5 * 60 * 1000;
+
+/** Reveal a rival garrison in the intel ledger. Refreshes the timestamp if
+ *  already known (extends the TTL). */
+export function revealIntel(
+  state: GameState,
+  targetId: string,
+  ownerFaction: FactionId,
+  source: "ESPIONAGE" | "RECON"
+) {
+  const existing = state.intel.find(
+    (e) => e.targetId === targetId && e.ownerFaction === ownerFaction
+  );
+  if (existing) {
+    existing.revealedAt = now();
+    existing.source = source;
+  } else {
+    state.intel.push({ targetId, ownerFaction, revealedAt: now(), source });
+  }
+}
+
+/** Prune TTL-expired intel entries. Called every tick. */
+export function pruneIntel(state: GameState) {
+  const cutoff = now() - INTEL_TTL_MS;
+  state.intel = state.intel.filter((e) => e.revealedAt > cutoff);
+}
+
+// ===== Wallet accrual =====
+// The operative passively earns VOTC from their garrisons' compute output
+// and their faction token from uptime. This funds the strike economy.
+export function accrueWallet(state: GameState) {
+  const myFaction = state.operative.faction;
+  const mine = state.garrisons.filter(
+    (o) => o.faction === myFaction && o.status !== "OFFLINE"
+  );
+  // VOTC: ~0.02 per garrison per tick (≈ 0.6/tick for 30 garrisons).
+  const votcGain = mine.reduce((a, o) => a + o.compute * 0.0008, 0);
+  state.operative.wallet.VOTC += votcGain;
+  // Faction token: 0.05 per online garrison per tick.
+  state.operative.wallet[myFaction] += mine.length * 0.05;
 }
 
 export function accrueUptime(state: GameState) {
@@ -431,6 +483,7 @@ export function tick(state: GameState) {
   state.clock = now();
   if (state.tick % 30 === 0) state.sol += 1; // every ~minute advance a "sol"
   accrueUptime(state);
+  accrueWallet(state);
   progressMissions(state);
   factionAiTurn(state);
   ambientEvents(state);
@@ -439,4 +492,5 @@ export function tick(state: GameState) {
   recalcTerritories(state);
   recalcFactions(state);
   recalcThreat(state);
+  pruneIntel(state);
 }

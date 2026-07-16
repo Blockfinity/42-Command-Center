@@ -80,6 +80,33 @@ export interface Operative {
   tier: "BASIC" | "ELITE" | "ARCHON";
   faction: FactionId;
   authority: number; // 0-100
+  /** Wallet balances — per-faction tokens + the universal VOTC currency.
+   * Attack missions cost the TARGET faction's tokens. Defend costs your own
+   * faction's tokens. BUILD/UPGRADE costs VOTC. Accrued passively from
+   * garrison uptime + mission rewards. */
+  wallet: {
+    VOTC: number;
+    FANG: number;
+    HAMMER: number;
+    RESOLUTE: number;
+  };
+}
+
+// ===== Intel ledger =====
+// Successful ESPIONAGE / RECON missions against rival garrisons reveal them
+// as "intel targets" — appearing in the Strike Console's target list with
+// their health/compute/level exposed. Intel expires after a TTL so the
+// theatre reflects only recently-scouted rivals. The ledger starts EMPTY
+// (no seeding) and fills organically through gameplay.
+export interface IntelEntry {
+  /** The scouted garrison id. */
+  targetId: string;
+  /** The faction that performed the recon (owns the intel). */
+  ownerFaction: FactionId;
+  /** Epoch ms — when the intel was gathered. Used for TTL expiry. */
+  revealedAt: number;
+  /** The mission type that produced this intel. */
+  source: "ESPIONAGE" | "RECON";
 }
 
 // ===== Territory system =====
@@ -190,6 +217,42 @@ export interface GameState {
   networkLoad: number;
   /** Total actions processed since boot (monotonic counter). */
   totalActions: number;
+  /** Intel ledger — rival garrisons revealed via ESPIONAGE/RECON. Starts empty;
+   * fills organically through gameplay. TTL-expired entries are pruned each tick. */
+  intel: IntelEntry[];
+}
+
+// ===== Currency =====
+// The network's universal currency is VOTC (used for BUILD/UPGRADE only).
+// Each faction also mints its own token (FANG | HAMMER | RESOLUTE) — attack
+// missions cost the TARGET faction's token, defend costs your OWN faction's
+// token. This creates the strategic loop: to attack HAMMER you must hold
+// HAMMER tokens (earned by defending against them or via intel trading).
+export type CurrencyId = "VOTC" | FactionId;
+
+/**
+ * Resolve which currency a given mission costs, per the token economy:
+ *   • ATTACK missions (DRONE_STRIKE, CYBER_ATTACK, ESPIONAGE) → TARGET faction's token
+ *   • DEFEND → SOURCE (your) faction's token
+ *   • RECON → SOURCE (your) faction's token
+ *   • BUILD → VOTC
+ */
+export function missionCurrency(
+  type: MissionType,
+  sourceFaction: FactionId,
+  targetFaction: FactionId
+): CurrencyId {
+  switch (type) {
+    case "DRONE_STRIKE":
+    case "CYBER_ATTACK":
+    case "ESPIONAGE":
+      return targetFaction;
+    case "DEFEND":
+    case "RECON":
+      return sourceFaction;
+    case "BUILD":
+      return "VOTC";
+  }
 }
 
 // ===== Client → Server socket actions =====
@@ -223,28 +286,28 @@ export const MISSION_META: Record<
     verb: "Infiltrate",
     duration: 22,
     cost: 20,
-    desc: "Deploy sleeper probes. Reveals rival mission queue and lowers their threat rating.",
+    desc: "Sleeper probes. Costs target faction token. Reveals the rival as an intel target for strikes.",
   },
   RECON: {
     label: "RECON",
     verb: "Scan",
     duration: 10,
     cost: 12,
-    desc: "Orbital sweep of a sector. Boosts your faction threat intel and morale.",
+    desc: "Orbital sweep of a sector. Costs your faction token. Boosts threat intel and morale.",
   },
   BUILD: {
     label: "BUILD",
     verb: "Construct",
     duration: 16,
-    cost: 0,
-    desc: "Reinforce a garrison. Costs build points, raises level and max health.",
+    cost: 25,
+    desc: "Reinforce a garrison. Costs VOTC, raises level and max health.",
   },
   DEFEND: {
     label: "DEFEND",
     verb: "Fortify",
     duration: 12,
-    cost: 0,
-    desc: "Raise shields on a garrison. Temporarily blocks incoming strikes.",
+    cost: 15,
+    desc: "Raise shields on a garrison. Costs your faction token. Blocks incoming strikes.",
   },
 };
 
