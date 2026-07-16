@@ -2080,3 +2080,63 @@ Stage Summary:
 - The measurement harness (/tmp/perf-measure.sh) is reusable: run it after any change
   to verify routes stay under 50ms.
 - HEAD = b321677 on origin/main. Lint clean. Dev server healthy. Browser-verified.
+
+---
+Task ID: GARRISON-VISIBILITY-1
+Agent: Z.ai Code (main session)
+Task: User reported "We should be able to see all of the garrisons that belong to the faction, right now garrisons appear and disappear from the map, also any identified enemy garrison". Also carried over from previous session: "i cant select a safehouse and see the quick preview window". Fix both.
+
+Work Log:
+- Read worklog to load context (canonical checkpoint = commit 17d3329 / tag checkpoint-canonical).
+- Inspected the garrison data flow end-to-end:
+  • game-engine (port 3003) broadcasts full GameState every 2s → zustand store
+  • game-engine.source.ts subscribes to store → garrisonsToGeoJSON(ALL garrisons) → emits to "game:garrisons" source
+  • outposts.layer.ts consumes "game:garrisons" → renders markers
+  • Confirmed via agent-browser eval: source had 16 features (all garrisons, friendly + enemy). Data layer is NOT the problem.
+- Root-caused the visibility bug via agent-browser + queryRenderedFeatures:
+  • At globe zoom (1.58), queryRenderedFeatures for BOTH garrison-clusters AND garrison-square returned 0 features.
+  • The source had cluster:true, clusterRadius:36, clusterMaxZoom:4. At globe zoom, clusterRadius (36px) is tiny relative to globe scale → spread-out garrisons never meet the minPoints:2 / radius threshold → NO clusters form.
+  • garrison-clusters layer had maxzoom:5 (hidden at zoom≥5).
+  • garrison-square layer had minzoom:5 (hidden at zoom<5).
+  • Result: at zoom 0-4, neither clusters nor individual markers render → EMPTY MAP. This is exactly what the user saw: "garrisons appear and disappear".
+- Root-caused the selection bug: at globe zoom the user couldn't SEE garrisons (above bug), so they had nothing to click. The click hit-test threshold (50km at zoom<5) was also too tight for globe-view clicks.
+
+Fix — outposts.layer.ts:
+- Disabled clustering entirely: cluster: false (was cluster:true, clusterRadius:36, clusterMaxZoom:4).
+- Removed minzoom:5 from garrison-square, garrison-hitbox, garrison-select → all visible from zoom 0.
+- Removed minzoom:5 from garrison-pulse (selection/under-attack ring).
+- Lowered garrison-code minzoom 7 → 6 (labels appear earlier).
+- Extended icon-size interpolation down to zoom 0: 0.18@0, 0.24@2, 0.35@5, 0.5@8, 0.65@12, 0.75@14, 0.85@16, 1.0@18. Small dot at globe view, crisp square at street view.
+- Extended hitbox radius interpolation down to zoom 0: 6@0, 7@2, 8@5, 10@8, 12@12, 14@14, 16@16, 18@18.
+- Extended selection-ring radius interpolation down to zoom 0.
+- Extended pulse-ring radius interpolation down to zoom 0.
+- Removed the two cluster layers entirely (garrison-clusters, garrison-cluster-label) — no clustering means no clusters to render.
+- Removed the cluster hit-test branch from onClick (src.getClusterExpansionZoom no longer relevant).
+- Re-tuned click threshold to be generous at low zoom (where globe+pitch unproject() is imprecise and clicks are inherently approximate):
+  • zoom<2: 1,500,000m (~1500km — globe view, whole-earth clicks)
+  • zoom<4: 600,000m (~600km — continent view)
+  • zoom<6: 200,000m (~200km — country view)
+  • zoom<8: 50,000m (~50km — region view)
+  • zoom<12: 8,000m (~8km — city view)
+  • zoom≥12: 2,000m (~2km — street view, markers visually distinct)
+- Simplified cachedGarrisons filter: removed the `!f.properties?.point_count` check (no clusters anymore — every feature is an individual garrison).
+
+Fix — layer-host.tsx:
+- Removed "garrison-clusters" from the hover-handler layer list (mouseenter/mouseleave registration + cleanup) since that layer no longer exists. Added a comment explaining why.
+
+Self-verification (agent-browser + VLM):
+- Fresh reload, ESTABLISH UPLINK, no console errors, no runtime errors.
+- At globe zoom 1.58: queryRenderedFeatures(garrison-square) returned 8 individual markers (the half of the globe facing the camera). VLM confirmed 5-6 visible white squares across North America, Europe, Africa, Middle East, South America — matching seeded garrison locations.
+- Marker factions confirmed: 2 FANG (friendly) + 4 HAMMER (enemy) + 2 RESOLUTE (enemy), including both Safehouse and Tactical Safehouse types. ALL garrisons visible regardless of faction.
+- Click on Fang Prime (FANG Safehouse, NYC) at GLOBE zoom → GarrisonDetailCard appeared with friendly actions (REINFORCE/RAISE SHIELDS/ORBITAL RECON/UPGRADE). ✅ (Previous-session bug "i cant select a safehouse and see the quick preview window" — FIXED.)
+- Click on Hammer Anvil (HAMMER enemy Safehouse, SF) at GLOBE zoom → card appeared with strike actions (LAUNCH DRONE STRIKE/CYBER ATTACK/ESPIONAGE). ✅ Enemy garrisons selectable.
+- Click on Fang Prime at STREET zoom (14, pitch 50) → card appeared. ✅ Works at all zoom levels.
+- Click same garrison again → card toggled closed. ✅
+- Lint: 0 errors, 0 warnings.
+
+Stage Summary:
+- BOTH issues fixed in 2 files (outposts.layer.ts, layer-host.tsx).
+- Root cause was clustering: clusterRadius too small to group spread-out garrisons at globe zoom → no clusters formed, AND individual markers were hidden by minzoom:5 → empty map at low zoom.
+- Fix: disabled clustering entirely, lowered all garrison marker minzooms to 0, extended icon-size + hitbox + selection-ring + pulse interpolations down to zoom 0, removed cluster layers, re-tuned click threshold to be generous at low zoom.
+- All 16 garrisons (friendly FANG + enemy HAMMER/RESOLUTE, Safehouse + Tactical) are now persistently visible at every zoom level — no appearing/disappearing.
+- Clicking any garrison (friendly or enemy) at any zoom level opens the quick-preview GarrisonDetailCard with the appropriate action set.

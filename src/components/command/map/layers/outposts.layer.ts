@@ -1,15 +1,18 @@
 // ---------------------------------------------------------------------------
 // Garrisons layer — white square markers with alphanumeric unit codes.
 //
-// SINGLE-TIER RENDERING (matches the SurveilTrack reference):
-//   • Country/globe zoom (0–5): clustered white circle summaries
-//   • Region/street zoom (5+): individual white square markers with
-//     alphanumeric unit codes (e.g. "FNG-3300-NYC"), bright + crisp.
+// ALL-GARRISONS-ALWAYS-VISIBLE (no clustering):
+//   • Every garrison (friendly + identified enemy) is rendered as an individual
+//     white square marker at ALL zoom levels — from globe view (zoom 0) down
+//     to street view (zoom 18+). No clustering, no appear/disappear on zoom.
+//   • Globe/country zoom (0–5): small white squares (icon-size ~0.18–0.35)
+//   • Region/street zoom (5+): larger white squares + alphanumeric unit codes
+//     (e.g. "FNG-3300-NYC"), bright + crisp.
 //
 // ONE CONTINUOUS experience — the same white-square marker aesthetic at all
-// zoom levels where individual garrisons are visible. No two-mode transition.
+// zoom levels. Garrisons never vanish when zooming or panning.
 //
-// Consumes source: "game:garrisons" (clustered GeoJSON points).
+// Consumes source: "game:garrisons" (non-clustered GeoJSON points).
 // Handles garrison click selection via the interaction context.
 // ---------------------------------------------------------------------------
 
@@ -47,9 +50,12 @@ export const garrisonsLayer: MapLayerSpec = {
     map.addSource(SRC, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
-      cluster: true,
-      clusterRadius: 36,
-      clusterMaxZoom: 4,
+      // NO clustering — every garrison is always rendered as an individual
+      // marker. This was the root-cause fix for "garrisons appear and disappear
+      // from the map": with clustering, spread-out garrisons at globe zoom
+      // didn't form clusters (clusterRadius too small relative to globe scale),
+      // and individual markers were hidden by minzoom:5 → empty map at low zoom.
+      cluster: false,
       promoteId: "id",
     });
 
@@ -67,7 +73,7 @@ export const garrisonsLayer: MapLayerSpec = {
       source: SRC,
       filter: ["any", ["==", ["get", "selected"], 1], ["==", ["get", "underAttack"], 1]],
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 14, 4, 20, 8, 28, 12, 16, 16, 22],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 8, 2, 10, 4, 14, 8, 20, 12, 16, 16, 22],
         "circle-color": "#fff",
         "circle-opacity": 0.25,
         "circle-blur": 0.8,
@@ -75,19 +81,18 @@ export const garrisonsLayer: MapLayerSpec = {
       },
     });
 
-    // ===== INDIVIDUAL GARRISON MARKERS (zoom 5+) =====
+    // ===== INDIVIDUAL GARRISON MARKERS (ALL zoom levels — no minzoom) =====
 
     // --- Garrison: transparent hitbox (reliable click target) ---
     // Symbol layers aren't reliably returned by queryRenderedFeatures under
     // pitch, so this invisible circle layer acts as the click target.
+    // No minzoom — clickable at every zoom level (globe → street).
     map.addLayer({
       id: "garrison-hitbox",
       type: "circle",
       source: SRC,
-      filter: ["!", ["has", "point_count"]],
-      minzoom: 5,
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 8, 8, 10, 12, 12, 14, 14, 16, 16, 18, 18],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 6, 2, 7, 5, 8, 8, 10, 12, 12, 14, 14, 16, 16, 18, 18],
         "circle-color": "rgba(0,0,0,0)",
         "circle-stroke-color": "rgba(0,0,0,0)",
         "circle-stroke-width": 0,
@@ -96,15 +101,15 @@ export const garrisonsLayer: MapLayerSpec = {
     });
 
     // --- Garrison: white square marker (SurveilTrack-style, all zoom levels) ---
+    // No minzoom — visible from globe view (zoom 0) onward. icon-size interpolates
+    // from a small dot at globe zoom (0.18) up to a crisp square at street zoom (1.0).
     map.addLayer({
       id: "garrison-square",
       type: "symbol",
       source: SRC,
-      filter: ["!", ["has", "point_count"]],
-      minzoom: 5,
       layout: {
         "icon-image": "street-marker",
-        "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.35, 8, 0.5, 12, 0.65, 14, 0.75, 16, 0.85, 18, 1.0],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 0, 0.18, 2, 0.24, 5, 0.35, 8, 0.5, 12, 0.65, 14, 0.75, 16, 0.85, 18, 1.0],
         "icon-allow-overlap": true,
         "icon-ignore-placement": true,
         "symbol-sort-key": ["match", ["get", "type"], "Safehouse", 2, 1],
@@ -115,16 +120,17 @@ export const garrisonsLayer: MapLayerSpec = {
     });
 
     // --- Garrison: alphanumeric unit code label (e.g. "FNG-3300-NYC") ---
+    // Shown from zoom 6+ (was 7) — labels appear earlier so users can identify
+    // garrisons at region zoom without needing to zoom all the way to street.
     map.addLayer({
       id: "garrison-code",
       type: "symbol",
       source: SRC,
-      filter: ["!", ["has", "point_count"]],
-      minzoom: 7,
+      minzoom: 6,
       layout: {
         "text-field": "{code}",
         "text-font": ["Noto Sans Regular"],
-        "text-size": ["interpolate", ["linear"], ["zoom"], 7, 8, 10, 9, 13, 11, 16, 13, 18, 14],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 6, 8, 10, 9, 13, 11, 16, 13, 18, 14],
         "text-offset": [0, 1.4],
         "text-anchor": "top",
         "text-allow-overlap": false,
@@ -140,52 +146,19 @@ export const garrisonsLayer: MapLayerSpec = {
     });
 
     // --- Garrison: selection bracket (brighter ring under the square) ---
+    // No minzoom — selection ring shows at every zoom level so the user can
+    // see which garrison is selected even at globe view.
     map.addLayer({
       id: "garrison-select",
       type: "circle",
       source: SRC,
-      filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "selected"], 1]],
-      minzoom: 5,
+      filter: ["all", ["==", ["get", "selected"], 1]],
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 10, 8, 13, 12, 15, 16, 18, 18, 20],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 7, 2, 8, 5, 10, 8, 13, 12, 15, 16, 18, 18, 20],
         "circle-color": "rgba(0,0,0,0)",
         "circle-stroke-color": "#ffffff",
         "circle-stroke-opacity": 0.9,
         "circle-stroke-width": 1.5,
-      },
-    });
-
-    // ===== CLUSTERS (globe/country zoom only — zoom 0–4) =====
-
-    map.addLayer({
-      id: "garrison-clusters",
-      type: "circle",
-      source: SRC,
-      filter: ["has", "point_count"],
-      maxzoom: 5,
-      paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 16, 4, 22],
-        "circle-color": "rgba(255,255,255,0.08)",
-        "circle-stroke-color": "#fff",
-        "circle-stroke-width": 0.6,
-        "circle-stroke-opacity": 0.5,
-      },
-    });
-    map.addLayer({
-      id: "garrison-cluster-label",
-      type: "symbol",
-      source: SRC,
-      filter: ["has", "point_count"],
-      maxzoom: 5,
-      layout: {
-        "text-field": "{point_count}",
-        "text-font": ["Noto Sans Regular"],
-        "text-size": 11,
-        "text-allow-overlap": true,
-      },
-      paint: {
-        "text-color": "#fff",
-        "text-opacity": 0.85,
       },
     });
   },
@@ -193,11 +166,12 @@ export const garrisonsLayer: MapLayerSpec = {
   onData(map, _sourceId, data) {
     const src = map.getSource(SRC) as maplibregl.GeoJSONSource | undefined;
     if (src) src.setData(data);
-    // Cache non-cluster garrison points for reliable lngLat-based click hit-testing.
+    // Cache garrison points for reliable lngLat-based click hit-testing.
+    // With clustering disabled, every feature is an individual garrison.
     const fc = data as FeatureCollection<Geometry>;
     if (fc && Array.isArray(fc.features)) {
       cachedGarrisons = fc.features
-        .filter((f) => !f.properties?.point_count && f.geometry?.type === "Point")
+        .filter((f) => f.geometry?.type === "Point")
         .map((f) => {
           const c = (f.geometry as { coordinates: [number, number] }).coordinates;
           return { id: (f.properties as { id: string }).id, lng: c[0], lat: c[1] };
@@ -215,7 +189,7 @@ export const garrisonsLayer: MapLayerSpec = {
         map.setPaintProperty("garrison-pulse", "circle-opacity", pulse);
         map.setPaintProperty("garrison-pulse", "circle-radius", [
           "interpolate", ["linear"], ["zoom"],
-          0, 14 + radiusBoost, 4, 20 + radiusBoost, 8, 28 + radiusBoost, 12, 16, 16, 22,
+          0, 8 + radiusBoost, 2, 10 + radiusBoost, 4, 14 + radiusBoost, 8, 20 + radiusBoost, 12, 16, 16, 22,
         ]);
       }
     } catch {
@@ -229,12 +203,20 @@ export const garrisonsLayer: MapLayerSpec = {
     // (symbol/circle layers don't query consistently), so we use the click's
     // geographic coordinates to find the nearest cached garrison within a
     // zoom-aware threshold. This is 100% projection-independent.
+    //
+    // Threshold is generous at low zoom (globe view — clicks are imprecise,
+    // and the globe+pitch unproject() has ~500m of positional error even at
+    // street zoom). At street zoom the threshold shrinks so adjacent
+    // garrisons don't steal each other's clicks.
     const lngLat = e.lngLat as { lng: number; lat: number };
     const zoom = map.getZoom();
-    // Click tolerance in meters — shrinks at higher zoom (markers are visually
-    // closer together). Generous at street zoom because the globe+pitch
-    // unproject() has ~500m of positional error vs the rendered marker.
-    const thresholdMeters = zoom < 5 ? 50000 : zoom < 8 ? 8000 : zoom < 12 ? 2000 : 1200;
+    const thresholdMeters =
+      zoom < 2 ? 1_500_000 // ~1500km — globe view, whole-earth clicks
+      : zoom < 4 ? 600_000   // ~600km — continent view
+      : zoom < 6 ? 200_000   // ~200km — country view
+      : zoom < 8 ? 50_000    // ~50km — region view
+      : zoom < 12 ? 8_000    // ~8km — city view
+      : 2_000;               // ~2km — street view (tight, markers are visually distinct)
 
     let nearest: { id: string; dist: number } | null = null;
     for (const op of cachedGarrisons) {
@@ -249,29 +231,6 @@ export const garrisonsLayer: MapLayerSpec = {
       const isCurrentlySelected = nearest.id === ctx.interaction.selectedId;
       ctx.interaction.onSelect(isCurrentlySelected ? null : nearest.id);
       return;
-    }
-
-    // ---- Cluster hit-test (globe view) → zoom in to expand ----
-    const pt = e.point as { x: number; y: number };
-    const tol = 16;
-    const box: [[number, number], [number, number]] = [
-      [pt.x - tol, pt.y - tol],
-      [pt.x + tol, pt.y + tol],
-    ];
-    const clusterFeats = map.queryRenderedFeatures(box, {
-      layers: ["garrison-clusters"],
-    });
-    if (clusterFeats.length > 0) {
-      e.preventDefault();
-      const f = clusterFeats[0];
-      const clusterId = f.properties?.cluster_id as number;
-      const src = map.getSource(SRC) as maplibregl.GeoJSONSource;
-      if (src && clusterId !== undefined) {
-        src.getClusterExpansionZoom(clusterId).then((zoom) => {
-          const coords = (f.geometry as { coordinates: [number, number] }).coordinates;
-          map.easeTo({ center: coords, zoom: Math.max(zoom, 3) });
-        });
-      }
     }
   },
 

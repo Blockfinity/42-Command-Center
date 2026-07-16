@@ -159,13 +159,14 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         const intr = interactionRef.current;
         map.getCanvas().style.cursor = intr.placementMode ? "crosshair" : "grab";
       };
-      // Garrison hover → pointer (all garrison marker layers)
+      // Garrison hover → pointer (all garrison marker layers).
+      // Note: garrison-clusters layer was removed when clustering was disabled
+      // (every garrison now renders as an individual marker at all zoom levels).
       [
         "garrison-square",
         "garrison-code",
         "garrison-select",
         "garrison-hitbox",
-        "garrison-clusters",
       ].forEach((layerId) => {
         if (map.getLayer(layerId)) {
           map.on("mouseenter", layerId, setPointer);
@@ -212,7 +213,7 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
         if (clickTimer !== null) clearTimeout(clickTimer);
         map.off("click", onClick);
         map.off("move", onMove);
-        ["garrison-square", "garrison-code", "garrison-select", "garrison-hitbox", "garrison-clusters"].forEach((layerId) => {
+        ["garrison-square", "garrison-code", "garrison-select", "garrison-hitbox"].forEach((layerId) => {
           if (map.getLayer(layerId)) {
             map.off("mouseenter", layerId, setPointer);
             map.off("mouseleave", layerId, setGrab);
