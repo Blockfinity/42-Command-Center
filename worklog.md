@@ -2245,3 +2245,50 @@ Stage Summary:
 - **What I kept:** strike-plan.ts, outpost-detail-card.tsx (confirm buttons with costs), types.ts (wallet/intel/CurrencyId), game-engine token economy + intel ledger, tile-provider.ts (MapTiler), /api/state IPv6 fix. These are NOT part of the StrikeConsole panel and the user only asked to revert the StrikeConsole.
 - **What I re-applied:** the minimal BUG-001 source-arming fix (source button sets `pending.sourceId` when a mission type is armed). Without this, the restored e06c131 StrikeConsole would dead-end the strike flow (sourceId never set → command-deck.tsx commit branch never fires). This restores the "fixed and working" behavior the user referenced.
 - **Verified:** 3-step flow works end-to-end (pick type → pick source → click rival → mission commits). Lint clean. No console errors.
+
+---
+Task ID: RESTORE-STRIKE-2
+Agent: main (Z.ai Code)
+Task: User clarified the "previous work" they wanted to revert to: the full Token Economy + 2-step StrikeConsole redesign + GarrisonDetailCard confirm buttons + garrison card positioning fixes + click-outside bug fix. My previous revert (commit 7352747) was wrong — I reverted AWAY from the 2-step redesign instead of restoring it. This task restores the correct state and completes the final unfinished fix (click-outside listener removal).
+
+Work Log:
+- Read the user's full message — a conversation summary describing the prior session's work:
+  1. Token Economy (attack=target faction token, defend=own faction token, build=VOTC)
+  2. StrikeConsole 2-step MODE 1/MODE 2 redesign (the "I can't see anything" fix)
+  3. GarrisonDetailCard confirm buttons with cost + auto-source-pick + wallet strip
+  4. "Operative wallet" → "Resources" rename
+  5. Garrison detail card placement fixes (above status bar, z-50, drop shadow)
+  6. Click-anywhere-closes-it bug fix (stable refs, backup closest check)
+  7. "remove the balances from the top all of them" (WalletArea unregistered from header)
+  8. Final issues: "when i click on the garrison screen it dissapears please fix, also ensure is responsive and is next to the hot keys icons not behind them, also the preview needs to be moved up is too low"
+  9. Card repositioned to left-14 top-20, responsive
+  10. UnitInfoPanel moved to right-4 top-20
+  11. Final fix (couldn't save due to tool outage): remove document pointerdown listener entirely
+- Realized my previous revert (7352747) was wrong — I reverted the StrikeConsole AWAY from the 2-step redesign instead of restoring it.
+- Restored left-panel.tsx from commit 54f3acf (`git checkout 54f3acf -- src/components/command/left-panel.tsx`) — the 2-step MODE 1/MODE 2 StrikeConsole with wallet strips, intel-driven target cards, confirm buttons, auto-source-pick.
+- Verified token economy is intact: strike-plan.ts (189 lines), types.ts (wallet + IntelEntry + CurrencyId + missionCurrency), game-engine (actions.ts + logic.ts + state.ts with intel ledger + accrueWallet + ESPIONAGE reveals intel + mission costs deducted).
+- Verified GarrisonDetailCard (outpost-detail-card.tsx) has confirm buttons with cost + auto-source-pick + wallet strip (from 54f3acf).
+- Verified header registry (header-registry.ts) does NOT include WalletArea — wallet balances removed from top. Only faction strength standings (FANG 048 / HAMMER 053 / RESOLUTE 052) remain.
+- Fixed GarrisonDetailCard position: changed from `bottom-4 right-4 z-40` → `left-14 top-20 z-50` with responsive classes (`w-[calc(100vw-4rem)] max-w-80 sm:left-16 sm:w-80`), drop shadow (`shadow-[0_8px_32px_rgba(0,0,0,0.7)]`), and max-height that clears the status bar (`max-h-[calc(100vh-8rem)]`). Added `data-garrison-detail-card` attribute.
+- Removed the document pointerdown listener entirely from GarrisonDetailCard. The card is now a PERSISTENT panel that only closes via: X button, ESC key (command-deck.tsx), or map click (toggle/swap/empty-ocean). This fixes the "click anywhere and it disappears" bug.
+- Moved UnitInfoPanel (preview) from `left-4 top-1/2 -translate-y-1/2` (left-center, too low, overlapping nav rail) → `right-4 top-20` (right-top, moved up, no overlap with the repositioned detail card).
+- Ran `bun run lint` — clean.
+- Verified end-to-end with Agent Browser:
+  - StrikeConsole MODE 1: 6 mission profiles with correct currency labels (TGT TOKEN / OWN TOKEN / VOTC) ✓
+  - StrikeConsole MODE 2: click DRONE STRIKE → STEP 2/2 + intel target list (starts empty with ARM ESPIONAGE CTA — no enemy safehouse seeding) ✓
+  - GarrisonDetailCard: positioned at left:64px top:80px width:320px z-index:50 (next to nav rail, top-aligned) ✓
+  - Click nav rail (Mission Queue) → card STAYS OPEN (click-outside bug FIXED) ✓
+  - Click inside card header → card STAYS OPEN ✓
+  - Click X button → card closes ✓
+  - UnitInfoPanel: positioned at right:1012px top:80px (right-top, moved up, no overlap with detail card) ✓
+  - Header: no wallet balances (only faction strength standings remain) ✓
+  - No console errors ✓
+- Committed as `54e9e3f restore: 2-step StrikeConsole + fix garrison card position + remove click-outside listener` — 3 files changed, 252 insertions(+), 68 deletions(-).
+
+Stage Summary:
+- **StrikeConsole**: restored to the 2-step MODE 1/MODE 2 redesign (mission profile picker → intel-driven target cards with confirm buttons + auto-source-pick + wallet strips). Intel starts empty (no enemy safehouse seeding).
+- **GarrisonDetailCard**: repositioned to left-14 top-20 z-50 (next to nav rail, responsive, drop shadow, clears status bar). Document pointerdown listener REMOVED — card is a persistent panel that only closes via X/ESC/map-click.
+- **UnitInfoPanel**: moved from left-4 top-1/2 (left-center, too low) → right-4 top-20 (right-top, moved up, no overlap).
+- **Token economy**: intact (strike-plan.ts + types.ts wallet/intel/CurrencyId + game-engine accrueWallet + ESPIONAGE reveals intel + mission costs deducted).
+- **Header**: no wallet balances (WalletArea unregistered). Faction strength standings remain.
+- **3 factions only**: FANG / HAMMER / RESOLUTE.
