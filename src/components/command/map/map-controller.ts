@@ -162,10 +162,15 @@ export function createMap(opts: CreateMapOptions): MapController {
     bearing: 0,
     pitch: 0,
     attributionControl: false,
-    // Gesture controls — all enabled so the user can rotate/tilt/pan freely
-    // at any zoom level. Right-click drag (or Ctrl+drag) rotates; two-finger
-    // trackpad / pinch rotates + tilts on touch devices.
-    dragRotate: true,
+    // Gesture controls — native handlers cover pan, scroll-zoom, touch
+    // pinch-zoom, touch twist-rotate, and touch swipe-tilt. dragRotate is
+    // DISABLED: native right-click/shift/ctrl rotate is replaced by custom
+    // Google Earth-style mouse handlers (right-click zoom+tilt, middle-mouse
+    // rotate, shift-drag tilt, ctrl-drag look) defined below.
+    //
+    // NOTE: touchZoomRotate (touch pinch + twist) is independent of dragRotate
+    // in maplibre-gl v5+, so touch rotate still works with dragRotate: false.
+    dragRotate: false,
     dragPan: true,
     scrollZoom: true,
     touchZoomRotate: true,
@@ -195,28 +200,190 @@ export function createMap(opts: CreateMapOptions): MapController {
   };
   map.on("dblclick", onDblClick);
 
-  // ---- Auto-pitch: ease to isometric (50°) when zooming into city level ----
-  // Continuous Google Earth-like experience: flat globe at low zoom, tilts
-  // to isometric 3D cityscape as you zoom into streets.
+  // ---- Auto-tilt: continuous pitch that scales with zoom (Google Earth style) ----
+  // Flat (0°) at globe/region zoom (zoom ≤ 8), ramps continuously to ~55° by
+  // zoom 15 (oblique 3D cityscape). This gives the "automatic tilt adjustment"
+  // that accompanies zoom in Google Earth — zooming in tilts toward the
+  // horizon, zooming out returns to top-down.
   //
-  // ROBUST against cancelled animations: instead of tracking state transitions
-  // (which breaks when a rapid zoomIn() cancels a mid-flight pitch easeTo,
-  // leaving the pitch stuck at an intermediate value), we check the ACTUAL
-  // pitch against the target on every zoomend. If they're significantly off,
-  // we re-ease. The 15° threshold avoids fighting manual dragRotate adjustments.
-  const PITCH_TILT_ZOOM = 9;     // zoom threshold: tilt at 9+
-  const PITCH_TILTED = 50;       // target pitch when tilted
-  const PITCH_FLAT = 0;          // target pitch when flat
-  const PITCH_THRESHOLD = 15;    // re-ease if |actual - target| > this
+  // targetPitchForZoom is shared with the right-click-drag zoom gesture so the
+  // tilt stays consistent whether zooming via scroll, double-click, or right-drag.
+  //
+  // suppressZoomEnd is set during right-click drag (which sets pitch inline on
+  // every mousemove) so the easeTo here doesn't fight the live drag updates.
+  //
+  // ROBUST against cancelled animations: we check the ACTUAL pitch against the
+  // target on every zoomend and re-ease only if they're significantly off. The
+  // 10° threshold avoids fighting small manual adjustments while still snapping
+  // back to the auto-tilt curve after large zoom changes.
+  const PITCH_THRESHOLD = 10;    // re-ease if |actual - target| > this
+  let suppressZoomEnd = false;   // true during right-click drag (pitch set inline)
+  const targetPitchForZoom = (z: number): number => {
+    if (z <= 8) return 0;
+    if (z >= 15) return 55;
+    return (z - 8) * (55 / 7);   // linear ramp 0°→55° across zoom 8→15
+  };
   const onZoomEnd = () => {
+    if (suppressZoomEnd) return;
     const z = map.getZoom();
     const p = map.getPitch();
-    const target = z >= PITCH_TILT_ZOOM ? PITCH_TILTED : PITCH_FLAT;
+    const target = targetPitchForZoom(z);
     if (Math.abs(p - target) > PITCH_THRESHOLD) {
       map.easeTo({ pitch: target, duration: 600 });
     }
   };
   map.on("zoomend", onZoomEnd);
+
+  // ---- Google Earth-style mouse gestures ----
+  // Native MapLibre handlers cover: left-drag pan, scroll zoom, double-click
+  // zoom, touch pinch-zoom, touch two-finger twist-rotate, touch two-finger
+  // swipe-tilt. dragRotate is DISABLED (above) so native right-click/shift/ctrl
+  // rotate never fires — we implement those gestures manually to match Google
+  // Earth's control scheme exactly:
+  //
+  //   Right-click drag (up/down)        → Zoom in/out + automatic tilt adjustment
+  //   Middle-mouse drag (left/right)    → Rotate / spin view (bearing)
+  //   Shift + left-click drag (up/down) → Tilt view (pitch)
+  //   Ctrl/Cmd + left-click drag        → First-person look (pitch + bearing)
+  //   Double-click                      → Zoom in 3x, centered on click [above]
+  //   Left-click drag                   → Pan  [native dragPan]
+  //   Scroll wheel                      → Zoom [native scrollZoom]
+  //
+  // Touch (native MapLibre touchZoomRotate + touchPitch):
+  //   Double-tap           → Zoom in [handler above]
+  //   Pinch in/out         → Zoom out/in
+  //   One-finger drag      → Pan
+  //   Two-finger twist     → Rotate
+  //   Two-finger swipe up  → Tilt toward horizon
+  //   Two-finger swipe down → Tilt toward top-down
+  const canvas = map.getCanvas();
+
+  type GestureState = {
+    type: "right-zoom" | "middle-rotate" | "shift-tilt" | "ctrl-look";
+    startX: number;
+    startY: number;
+    startZoom: number;
+    startPitch: number;
+    startBearing: number;
+  };
+  let activeGesture: GestureState | null = null;
+
+  const onCanvasMouseDown = (e: MouseEvent) => {
+    const button = e.button;
+    // Shift + left-click → tilt
+    if (button === 0 && e.shiftKey) {
+      activeGesture = {
+        type: "shift-tilt",
+        startX: e.clientX, startY: e.clientY,
+        startZoom: map.getZoom(), startPitch: map.getPitch(), startBearing: map.getBearing(),
+      };
+      // Suppress native dragPan so it doesn't pan while we tilt.
+      if (map.dragPan.isEnabled()) map.dragPan.disable();
+      pauseAutoRotate(3000);
+      e.preventDefault();
+      return;
+    }
+    // Ctrl/Cmd + left-click → first-person look (pitch + bearing)
+    if (button === 0 && (e.ctrlKey || e.metaKey)) {
+      activeGesture = {
+        type: "ctrl-look",
+        startX: e.clientX, startY: e.clientY,
+        startZoom: map.getZoom(), startPitch: map.getPitch(), startBearing: map.getBearing(),
+      };
+      if (map.dragPan.isEnabled()) map.dragPan.disable();
+      pauseAutoRotate(3000);
+      e.preventDefault();
+      return;
+    }
+    // Right-click → zoom + automatic tilt
+    if (button === 2) {
+      activeGesture = {
+        type: "right-zoom",
+        startX: e.clientX, startY: e.clientY,
+        startZoom: map.getZoom(), startPitch: map.getPitch(), startBearing: map.getBearing(),
+      };
+      suppressZoomEnd = true;
+      pauseAutoRotate(3000);
+      e.preventDefault();
+      return;
+    }
+    // Middle-click → rotate (bearing)
+    if (button === 1) {
+      activeGesture = {
+        type: "middle-rotate",
+        startX: e.clientX, startY: e.clientY,
+        startZoom: map.getZoom(), startPitch: map.getPitch(), startBearing: map.getBearing(),
+      };
+      pauseAutoRotate(3000);
+      e.preventDefault();
+      return;
+    }
+  };
+  // Capture phase so we run BEFORE MapLibre's own bubble-phase mousedown handlers.
+  canvas.addEventListener("mousedown", onCanvasMouseDown, true);
+
+  // Suppress the browser context menu on right-click over the canvas.
+  const onContextMenu = (e: MouseEvent) => e.preventDefault();
+  canvas.addEventListener("contextmenu", onContextMenu);
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (!activeGesture) return;
+    const dx = e.clientX - activeGesture.startX;
+    const dy = e.clientY - activeGesture.startY;
+    switch (activeGesture.type) {
+      case "right-zoom": {
+        // Drag up (negative dy) = zoom in; drag down (positive dy) = zoom out.
+        // ~0.012 zoom levels per pixel → 100px drag ≈ 1.2 zoom levels.
+        const newZoom = Math.max(0, Math.min(18, activeGesture.startZoom - dy * 0.012));
+        // Automatic tilt: pitch scales continuously with the new zoom.
+        map.jumpTo({ zoom: newZoom, pitch: targetPitchForZoom(newZoom) });
+        break;
+      }
+      case "middle-rotate": {
+        // Horizontal drag rotates bearing. Drag right = rotate clockwise.
+        map.jumpTo({ bearing: activeGesture.startBearing - dx * 0.25 });
+        break;
+      }
+      case "shift-tilt": {
+        // Vertical drag tilts. Drag down = tilt toward horizon; up = top-down.
+        const newPitch = Math.max(0, Math.min(80, activeGesture.startPitch + dy * 0.35));
+        map.jumpTo({ pitch: newPitch });
+        break;
+      }
+      case "ctrl-look": {
+        // First-person look: vertical = pitch, horizontal = bearing.
+        const newPitch = Math.max(0, Math.min(80, activeGesture.startPitch + dy * 0.35));
+        map.jumpTo({
+          pitch: newPitch,
+          bearing: activeGesture.startBearing - dx * 0.25,
+        });
+        break;
+      }
+    }
+  };
+  window.addEventListener("mousemove", onMouseMove);
+
+  const endGesture = () => {
+    if (!activeGesture) return;
+    const wasRightZoom = activeGesture.type === "right-zoom";
+    activeGesture = null;
+    // Re-enable native dragPan (disabled during shift/ctrl gestures).
+    if (!map.dragPan.isEnabled()) map.dragPan.enable();
+    if (wasRightZoom) {
+      suppressZoomEnd = false;
+    }
+  };
+  window.addEventListener("mouseup", endGesture);
+
+  // Cancel any active gesture if the window loses focus (e.g. alt-tab mid-drag).
+  const onBlurGesture = () => {
+    if (activeGesture) {
+      activeGesture = null;
+      if (!map.dragPan.isEnabled()) map.dragPan.enable();
+      suppressZoomEnd = false;
+    }
+  };
+  window.addEventListener("blur", onBlurGesture);
 
   // ---- Auto-spin loop (pauses 3.5s after user interaction) ----
   // SPIN ON AXIS, not view rotation. We shift the center longitude eastward
@@ -304,6 +471,11 @@ export function createMap(opts: CreateMapOptions): MapController {
     container.removeEventListener("pointerdown", onInteract);
     container.removeEventListener("wheel", onInteract);
     container.removeEventListener("touchstart", onInteract);
+    canvas.removeEventListener("mousedown", onCanvasMouseDown, true);
+    canvas.removeEventListener("contextmenu", onContextMenu);
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", endGesture);
+    window.removeEventListener("blur", onBlurGesture);
     map.remove();
   };
 
