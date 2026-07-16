@@ -8,7 +8,13 @@ import type {
   MissionType,
   GarrisonType,
 } from "@/lib/types";
-import { io, type Socket } from "socket.io-client";
+
+// socket.io-client is lazy-imported inside getSocket() so it stays OUT of the
+// initial client JS bundle (~40KB saved). It's only needed after the user
+// clicks ESTABLISH UPLINK — by which point the boot screen has been visible
+// for ~2.6s, plenty of time for the dynamic import to resolve. The type-only
+// import below is erased at compile time (zero runtime cost).
+import type { Socket } from "socket.io-client";
 
 interface CommandStore {
   state: GameState | null;
@@ -31,9 +37,18 @@ interface CommandStore {
 }
 
 let socketSingleton: Socket | null = null;
+let socketPromise: Promise<Socket> | null = null;
 
-function getSocket(): Socket {
-  if (!socketSingleton) {
+/**
+ * Lazily import + create the socket.io connection. The socket.io-client
+ * library (~40KB) is code-split into a separate chunk that only loads when
+ * the user actually clicks ESTABLISH UPLINK — keeping it out of the initial
+ * page bundle for faster hydration.
+ */
+function getSocket(): Promise<Socket> {
+  if (socketSingleton) return Promise.resolve(socketSingleton);
+  if (socketPromise) return socketPromise;
+  socketPromise = import("socket.io-client").then(({ io }) => {
     socketSingleton = io("/", {
       // Allow polling handshake (reliably forwarded by Caddy) then upgrade
       // to websocket for real-time ticks.
@@ -42,8 +57,9 @@ function getSocket(): Socket {
       reconnection: true,
       reconnectionDelay: 800,
     });
-  }
-  return socketSingleton;
+    return socketSingleton;
+  });
+  return socketPromise;
 }
 
 export const useCommand = create<CommandStore>((set, get) => ({
@@ -57,23 +73,35 @@ export const useCommand = create<CommandStore>((set, get) => ({
   socket: null,
 
   init: () => {
-    const socket = getSocket();
-    set({ socket });
+    let disposed = false;
+    let socket: Socket | null = null;
+    let onState: ((s: GameState) => void) | null = null;
+    let onConnect: (() => void) | null = null;
+    let onDisconnect: (() => void) | null = null;
 
-    const onState = (s: GameState) => set({ state: s });
-    const onConnect = () => set({ connected: true });
-    const onDisconnect = () => set({ connected: false });
+    getSocket().then((s) => {
+      if (disposed) return; // unmounted before socket resolved
+      socket = s;
+      set({ socket: s });
 
-    socket.on("state", onState);
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
+      onState = (st: GameState) => set({ state: st });
+      onConnect = () => set({ connected: true });
+      onDisconnect = () => set({ connected: false });
 
-    if (!socket.connected) socket.connect();
+      s.on("state", onState);
+      s.on("connect", onConnect);
+      s.on("disconnect", onDisconnect);
+
+      if (!s.connected) s.connect();
+    });
 
     return () => {
-      socket.off("state", onState);
-      socket.off("connect", onConnect);
-      socket.off("disconnect", onDisconnect);
+      disposed = true;
+      if (socket && onState && onConnect && onDisconnect) {
+        socket.off("state", onState);
+        socket.off("connect", onConnect);
+        socket.off("disconnect", onDisconnect);
+      }
     };
   },
 
