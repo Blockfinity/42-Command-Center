@@ -1936,3 +1936,51 @@ Stage Summary:
 - The fix is robust: uses the TileJSON `url` field (not a hardcoded tile path) so it survives OpenFreeMap data refreshes automatically.
 - Bonus hardening: the default provider now ships vector tiles out-of-the-box, so future environment resets will NOT silently break the 3D buildings again (the failure mode that caused this report).
 - HEAD = 8b8cf1d on origin/main. Lint clean. Dev server healthy. Browser-verified.
+
+---
+Task ID: GESTURE-GOOGLE-EARTH
+Agent: Z.ai Code (main session)
+Task: Update map controls to match Google Earth's gesture scheme (right-click zoom+tilt, middle-mouse rotate, shift+drag tilt, ctrl+drag first-person look, plus native pan/scroll/touch).
+
+Work Log:
+- Read worklog.md to load context (BUILDINGS-RESTORE was the most recent task; prior GESTURE-1 task had set up dragRotate:true + custom 3x dblclick). Current HEAD = 81426d2.
+- Confirmed maplibre-gl version = 5.24.0. In v5+, touchZoomRotate (touch pinch + twist) is independent of dragRotate (mouse right-click rotate), so disabling dragRotate does NOT affect touch rotate. Safe to set dragRotate: false.
+- Audited the existing gesture config in map-controller.ts: dragRotate:true, dragPan:true, scrollZoom:true, touchZoomRotate:true, touchPitch:true, keyboard:true, doubleClickZoom:false (custom 3x handler), maxPitch:80. Auto-pitch was BINARY (0° at zoom<9, 50° at zoom≥9) via onZoomend with a 15° threshold.
+
+Changes to map-controller.ts (+189/-17 lines):
+
+1. dragRotate: true → false. Native right-click/shift/ctrl rotate now never fires. Documented that touchZoomRotate is independent in v5+ so touch rotate is preserved.
+
+2. Auto-tilt: BINARY (0°/50° at zoom 9) → CONTINUOUS. New targetPitchForZoom(z): 0° at zoom ≤ 8, linear ramp to 55° by zoom 15. Shared between onZoomend (scroll/dblclick zoom) and the right-click drag so tilt is consistent across all zoom gestures. Threshold lowered 15→10 for more responsive auto-tilt. A suppressZoomEnd flag prevents onZoomend's easeTo from fighting right-click drag's inline pitch updates.
+
+3. Four custom Google Earth mouse gestures, implemented via capture-phase mousedown on the canvas (fires before MapLibre's bubble-phase handlers) + window-level mousemove/mouseup:
+   - Right-click drag (up/down) → Zoom in/out + automatic tilt. Drag up = zoom in (0.012 zoom levels/px); pitch set inline via targetPitchForZoom so it tracks zoom in real-time. suppressZoomEnd prevents onZoomend interference.
+   - Middle-mouse drag (left/right) → Rotate bearing (0.25°/px). preventDefault stops browser auto-scroll.
+   - Shift + left-click drag (up/down) → Tilt pitch only (0.35°/px, clamped 0-80°). dragPan temporarily disabled so native pan doesn't fight the tilt.
+   - Ctrl/Cmd + left-click drag → First-person look (pitch + bearing together). dragPan disabled during gesture.
+   - dragPan re-enabled on mouseup; window blur cancels any active gesture (alt-tab mid-drag safety).
+   - Context menu suppressed on right-click over the canvas.
+
+4. destroy() updated to remove all new listeners (canvas mousedown capture, contextmenu, window mousemove/mouseup/blur).
+
+Native handlers retained (unchanged): left-drag pan, scroll zoom, double-click 3x zoom, touch pinch-zoom, touch twist-rotate, touch swipe-tilt, touch one-finger pan, keyboard.
+
+Self-verification (agent-browser, synthetic mouse events at NYC):
+- Right-click drag up 180px: zoom 12.00 → 14.16 (+2.16, matches 180×0.012), pitch 31.4° → 48.4° (exactly targetPitchForZoom(14.16) = (14.16-8)×(55/7)). ✅
+- Middle-click drag right 200px: bearing 0.00° → -50.00° (200×0.25). ✅
+- Shift+left drag down 120px: pitch 48.4° → 80.0° (120×0.35=42°, clamped at maxPitch 80). ✅
+- Ctrl+left drag (right 120, down 90): bearing -50° → -80°, pitch adjusted. ✅
+- Double-click (DOM dblclick on canvas): zoom 10.00 → 13.00 (+3x exactly), pitch auto-tilting toward targetPitchForZoom(13)=39.3°. ✅
+- Scroll wheel (WheelEvent deltaY -300): zoom 14.16 → 17.16 (native scrollZoom). ✅
+- Handler states: dragPan.isEnabled()=true, dragRotate.isEnabled()=false, maxPitch=80. ✅
+- VLM on oblique screenshot (zoom 14.5, pitch 55): "3D extruded buildings with vertical walls, white road lines, tilted/horizon perspective." ✅
+- Lint: 0 errors, 0 warnings. ✅
+- Dev log: GET / 200, GET /api/state 200, no runtime/console errors. ✅
+
+Stage Summary:
+- The map now uses Google Earth's control scheme exactly:
+  - Mouse: right-click = zoom+auto-tilt, middle = rotate, shift+drag = tilt, ctrl/cmd+drag = first-person look, double-click = zoom in 3x, left-drag = pan, scroll = zoom.
+  - Trackpad: scroll/swipe = zoom, left-drag = pan, right-drag = zoom+tilt, shift+drag = tilt, twist = rotate (via touchZoomRotate where supported).
+  - Touch: double-tap = zoom in, pinch = zoom, one-finger drag = pan, two-finger twist = rotate, two-finger swipe up/down = tilt.
+- Auto-tilt is now continuous (smooth ramp 0→55° across zoom 8→15) instead of the old binary snap at zoom 9 — gives a more natural Google Earth feel when zooming.
+- HEAD = 39a21b7 on origin/main. Lint clean. Dev server healthy. Browser-verified.
