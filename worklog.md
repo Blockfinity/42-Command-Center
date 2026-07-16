@@ -2207,3 +2207,41 @@ Stage Summary:
 - Wallet strip remains removed from the header (per prior green-lit decision).
 - Only 3 factions: FANG / HAMMER / RESOLUTE.
 - Engine started with `bun run index.ts` (no --hot) via double-fork to prevent hot-reload crashes. Fixed /api/state IPv6 resolution bug.
+
+---
+Task ID: REVERT-STRIKE-1
+Agent: main (Z.ai Code)
+Task: Revert all changes made to the Strike Console. User said the change was already fixed and working — review the chat conversation to identify when it was fixed and what was done.
+
+Work Log:
+- Read worklog.md to understand prior agent work and the strike-plan system rebuild (commit 54f3acf).
+- Searched the chat history (`upload/Pasted Content_1784219104724.txt`) for StrikeConsole references — found 3 relevant events:
+  1. Line 7090: BUG-001 (P0) fix — "strike workflow was unreachable. pendingMission.sourceId was never set. Fixed: rebuilt as a coherent 3-step flow (pick type → click own outpost to arm source → click rival to commit) with two-state HUD guidance."
+  2. Line 14064: intel-driven target list (later enhancement)
+  3. Line 14398: 2-step MODE 1/MODE 2 redesign (the "I can't see anything" fix) — added wallet banner, step indicator, intel target cards with confirm buttons + auto-source-pick.
+- Examined git history: only commit 54f3acf (my rebuild) touched left-panel.tsx with the 2-step flow. The prior BUG-001 fix was NEVER committed to left-panel.tsx — only the command-deck.tsx portion (source-arming commit branch + state-2 HUD) was committed (via 1c73f82 checkpoint).
+- Confirmed via `git diff e06c131..54f3acf -- src/components/command/command-deck.tsx` (empty) — I did NOT change command-deck.tsx, so its BUG-001 commit branch + HUD are intact.
+- Restored left-panel.tsx from e06c131 (`git checkout e06c131 -- src/components/command/left-panel.tsx`) — 405 lines, the simple StrikeConsole (mission profiles list + source garrisons list, no wallet strip, no intel cards, no 2-step MODE panel).
+- Discovered the e06c131 StrikeConsole source button only calls `select(o.id); onNav("MAP")` — it does NOT set `pending.sourceId`, so the strike flow dead-ends (pre-BUG-001). The BUG-001 source-arming fix was lost to a sandbox reset and never committed.
+- Re-applied the minimal BUG-001 fix on top of the restored e06c131 StrikeConsole:
+  - Added `pending` to the store subscription.
+  - Source garrison button now calls `setPending({ type: armedType, sourceId: o.id })` when a mission type is armed (then `onNav("MAP")`), so the 3-step flow completes.
+  - Added `◆` armed marker on the selected mission profile button.
+  - Added `◆ {TYPE} ARMED · CLICK TO ARM SOURCE` hint in the SOURCE GARRISONS header when a mission is armed.
+- Verified strike-plan.ts is still used by outpost-detail-card.tsx (pickBestSource, missionCostLabel, canAfford, currencySymbol, missionCostCurrency) — kept it.
+- Ran `bun run lint` — clean.
+- Verified end-to-end with Agent Browser:
+  - Strike Console (hotkey 3): clicked DRONE STRIKE → `◆ DRONE STRIKE` armed marker + `ARMED · CLICK TO ARM SOURCE` hint appeared.
+  - Clicked Fang Prime (source garrison) → switched to MAP, HUD showed `◆ DRONE STRIKE ARMED · CLICK RIVAL GARRISON TO COMMIT`.
+  - Found rival garrison Hammer Anvil at (450, 240) via `window.__map.queryRenderedFeatures` grid scan.
+  - Clicked Hammer Anvil → HUD cleared (setPending(null) fired), detail card opened (select(id) fired) — commit branch in command-deck.tsx (line 159-177) executed, mission dispatched to engine.
+  - No console errors.
+- Committed as `7352747 revert: restore BUG-001 strike console (undo 2-step MODE 1/MODE 2 rebuild)` — 1 file changed, 34 insertions(+), 235 deletions(-).
+
+Stage Summary:
+- **What was "fixed and working" (per chat line 7090):** BUG-001 — the 3-step strike flow (pick type → click own outpost to arm source → click rival to commit) with two-state HUD guidance. This was the green-lit fix that made the strike workflow reachable.
+- **What my commit 54f3acf did wrong:** replaced the simple StrikeConsole with a 2-step MODE 1/MODE 2 panel (wallet strips + intel-driven target cards + auto-source-pick). The user said revert this.
+- **What I reverted:** left-panel.tsx StrikeConsole → restored to e06c131 (simple mission-profiles + source-garrisons list). Removed: WalletStrip helper, MODE 2 intel target cards, confirm buttons, auto-source-pick, wallet banner, step indicator.
+- **What I kept:** strike-plan.ts, outpost-detail-card.tsx (confirm buttons with costs), types.ts (wallet/intel/CurrencyId), game-engine token economy + intel ledger, tile-provider.ts (MapTiler), /api/state IPv6 fix. These are NOT part of the StrikeConsole panel and the user only asked to revert the StrikeConsole.
+- **What I re-applied:** the minimal BUG-001 source-arming fix (source button sets `pending.sourceId` when a mission type is armed). Without this, the restored e06c131 StrikeConsole would dead-end the strike flow (sourceId never set → command-deck.tsx commit branch never fires). This restores the "fixed and working" behavior the user referenced.
+- **Verified:** 3-step flow works end-to-end (pick type → pick source → click rival → mission commits). Lint clean. No console errors.
