@@ -131,7 +131,7 @@ export function UnitInfoPanel({ garrison, visible }: UnitInfoPanelProps) {
           className={cn(
             "pointer-events-auto absolute z-20 w-[252px]",
             "border border-white/25 bg-black/90 backdrop-blur-md",
-            "left-4 top-1/2 -translate-y-1/2",
+            "right-4 top-20",
             "shadow-[0_0_24px_rgba(0,0,0,0.6)]",
           )}
         >

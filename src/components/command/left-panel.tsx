@@ -4,9 +4,10 @@ import * as React from "react";
 import { useCommand } from "@/stores/command";
 import type { NavView } from "./nav-rail";
 import { cn } from "@/lib/utils";
-import { FACTIONS, MISSION_META, type FactionId, type GarrisonType, type MissionType } from "@/lib/types";
+import { FACTIONS, MISSION_META, NETWORK_CURRENCY, FACTION_TOKEN, type FactionId, type GarrisonType, type MissionType, type Garrison, type CurrencyId } from "@/lib/types";
 import { fmtUptime, FACTION_MARK_GLYPH } from "@/lib/format";
-import { Target, SatelliteDish, BrainCircuit, Rocket, ScanEye, ListChecks, Terminal, Orbit } from "lucide-react";
+import { Target, SatelliteDish, BrainCircuit, Rocket, ScanEye, ListChecks, Terminal, Orbit, ArrowLeft, ChevronRight, Crosshair, Zap, Eye, Shield, Hammer, Satellite, AlertTriangle } from "lucide-react";
+import { pickBestSource, listIntelTargets, missionCostLabel, canAfford, currencySymbol, missionCostCurrency } from "@/lib/strike-plan";
 
 const SEV_COLOR: Record<string, string> = {
   INFO: "text-white/55",
@@ -180,72 +181,272 @@ function Bar({ label, v, raw }: { label: string; v: number; raw?: string }) {
   );
 }
 
+// ── WalletStrip — compact currency display for the strike economy ────────
+// Shows the operative's balance of a specific currency (or all four) so the
+// player sees their war chest at the moment of spending. Used by the
+// StrikeConsole and the GarrisonDetailCard rival action list.
+function WalletStrip({ currency, balance }: { currency: CurrencyId; balance: number }) {
+  const sym = currencySymbol(currency);
+  const affordable = balance > 0;
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between border px-2 py-1 font-mono text-[9px] tracking-wide-2",
+        affordable
+          ? "border-white/20 text-white/70"
+          : "border-white/10 text-white/35"
+      )}
+    >
+      <span className="text-white/40">BALANCE</span>
+      <span>
+        {Math.floor(balance)} <span className="text-white/55">{sym}</span>
+      </span>
+    </div>
+  );
+}
+
 function StrikeConsole({ onNav }: { onNav: (v: NavView) => void }) {
   const state = useCommand((s) => s.state)!;
   const pending = useCommand((s) => s.pendingMission);
   const setPending = useCommand((s) => s.setPendingMission);
+  const sendAction = useCommand((s) => s.sendAction);
   const select = useCommand((s) => s.selectGarrison);
+
+  // MODE 2: a mission type is armed — show intel-driven target list
+  const armedType = pending?.type ?? null;
+
+  // Attack missions only (DRONE_STRIKE, CYBER_ATTACK, ESPIONAGE) use the
+  // intel-driven target flow. BUILD/DEFEND/RECON are self-targeted.
+  const ATTACK_TYPES: MissionType[] = ["DRONE_STRIKE", "CYBER_ATTACK", "ESPIONAGE"];
+  const isAttackArmed = armedType && ATTACK_TYPES.includes(armedType);
+
+  // ── MODE 2: intel target cards ────────────────────────────────────────
+  if (isAttackArmed) {
+    const meta = MISSION_META[armedType!];
+    const targets = listIntelTargets(state);
+    const myFaction = state.operative.faction;
+
+    return (
+      <div className="flex h-full flex-col p-3">
+        {/* step indicator */}
+        <div className="mb-3 flex items-center gap-2 font-mono text-[9px] tracking-mega text-white/45">
+          <Target size={11} strokeWidth={1.5} /> STRIKE CONSOLE
+          <span className="ml-auto text-white/30">STEP 2 / 2</span>
+        </div>
+
+        {/* armed mission banner + back button */}
+        <button
+          onClick={() => setPending(null)}
+          className="mb-3 flex w-full items-center gap-2 border border-white/20 bg-white/5 px-2 py-1.5 text-left transition-colors hover:border-white/40 hover:bg-white/10"
+        >
+          <ArrowLeft size={12} strokeWidth={1.5} className="text-white/60" />
+          <div className="flex-1">
+            <div className="font-mono text-[10px] font-bold tracking-wide-2 text-white">{meta.label}</div>
+            <div className="font-mono text-[8px] leading-snug text-white/45">{meta.desc}</div>
+          </div>
+        </button>
+
+        {/* wallet strip — shows the currency this attack costs (target faction token) */}
+        {targets.length > 0 && (
+          <div className="mb-3 space-y-1">
+            <div className="font-mono text-[8px] tracking-mega text-white/35">TARGET FACTION TOKENS</div>
+            {FACTIONS.filter((f) => f !== myFaction).map((f) => (
+              <WalletStrip
+                key={f}
+                currency={f}
+                balance={state.operative.wallet[f]}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* intel target list */}
+        <div className="mb-2 font-mono text-[9px] tracking-mega text-white/45">
+          INTEL TARGETS · {targets.length} REVEALED
+        </div>
+        <div className="flex-1 space-y-1.5 overflow-y-auto">
+          {targets.length === 0 && (
+            <div className="border border-dashed border-white/15 p-4 text-center">
+              <AlertTriangle size={16} strokeWidth={1.5} className="mx-auto mb-2 text-white/40" />
+              <div className="font-mono text-[9px] leading-snug text-white/50">
+                NO INTEL TARGETS REVEALED.<br />
+                RUN ESPIONAGE ON A RIVAL GARRISON<br />
+                TO ADD IT TO THE STRIKE LIST.
+              </div>
+              <button
+                onClick={() => {
+                  setPending({ type: "ESPIONAGE", sourceId: null });
+                }}
+                className="mt-3 border border-white/30 px-3 py-1 font-mono text-[9px] tracking-wide-2 text-white/80 hover:border-white/60 hover:text-white"
+              >
+                ARM ESPIONAGE
+              </button>
+            </div>
+          )}
+          {targets.map((tgt) => {
+            const source = pickBestSource(state, tgt.id);
+            const costLabel = missionCostLabel(armedType!, myFaction, tgt);
+            const affordable = canAfford(state, armedType!, tgt);
+            const hasSource = source !== null;
+            const canStrike = affordable && hasSource;
+            return (
+              <div
+                key={tgt.id}
+                className={cn(
+                  "border p-2 transition-colors",
+                  canStrike
+                    ? "border-white/20 hover:border-white/50"
+                    : "border-white/8 opacity-60"
+                )}
+              >
+                {/* target header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px] font-bold tracking-wide-2 text-white">
+                      {tgt.name}
+                    </span>
+                    <span className="font-mono text-[8px] tracking-wide-2 text-white/40">
+                      {tgt.faction}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[8px] text-white/40">
+                    LV{tgt.level} · {Math.round(tgt.health / tgt.maxHealth * 100)}%
+                  </span>
+                </div>
+                {/* target stats */}
+                <div className="mt-1 flex gap-3 font-mono text-[8px] text-white/45">
+                  <span>HULL {Math.round(tgt.health)}</span>
+                  <span>TFLOPS {tgt.compute}</span>
+                  <span>UPTIME {fmtUptime(tgt.uptime)}</span>
+                </div>
+                {/* confirm button */}
+                <button
+                  disabled={!canStrike}
+                  onClick={() => {
+                    if (!source) return;
+                    sendAction({
+                      kind: "launch-mission",
+                      missionType: armedType!,
+                      sourceId: source.id,
+                      targetId: tgt.id,
+                    });
+                    setPending(null);
+                  }}
+                  className={cn(
+                    "mt-2 flex w-full items-center justify-between border px-2 py-1.5 font-mono text-[9px] font-bold tracking-wide-2 transition-colors",
+                    canStrike
+                      ? "border-white/40 text-white hover:border-white hover:bg-white/10"
+                      : "cursor-not-allowed border-white/10 text-white/30"
+                  )}
+                >
+                  <span>CONFIRM {meta.label}</span>
+                  <span className="text-white/60">
+                    {!hasSource ? "NO SOURCE" : costLabel} · {meta.duration}s
+                  </span>
+                </button>
+                {!hasSource && (
+                  <div className="mt-1 font-mono text-[8px] text-white/35 blink">
+                    ⚠ NO ELIGIBLE SOURCE GARRISON
+                  </div>
+                )}
+                {hasSource && !affordable && (
+                  <div className="mt-1 font-mono text-[8px] text-white/35 blink">
+                    ⚠ INSUFFICIENT FUNDS
+                  </div>
+                )}
+                {hasSource && (
+                  <div className="mt-1 font-mono text-[8px] text-white/30">
+                    SOURCE: {source!.name} (auto-selected)
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── MODE 1: mission profile selection ──────────────────────────────────
   const mine = state.garrisons.filter((o) => o.faction === state.operative.faction && o.status !== "OFFLINE");
   const types: MissionType[] = ["DRONE_STRIKE", "CYBER_ATTACK", "ESPIONAGE", "RECON", "BUILD", "DEFEND"];
-  const armedType = pending?.type ?? null;
+  const intelCount = listIntelTargets(state).length;
+
   return (
     <div className="p-3">
       <div className="mb-3 flex items-center gap-2 font-mono text-[9px] tracking-mega text-white/45">
         <Target size={11} strokeWidth={1.5} /> STRIKE CONSOLE
+        <span className="ml-auto text-white/30">STEP 1 / 2</span>
       </div>
       <p className="mb-3 font-mono text-[9px] leading-snug text-white/45">
-        SELECT A MISSION PROFILE, THEN CHOOSE A SOURCE GARRISON. TARGET SELECTION HAPPENS ON THE MAP.
+        SELECT A MISSION PROFILE. ATTACKS REVEAL INTEL TARGETS IN STEP 2 —
+        CONFIRM WITH AUTO-SELECTED SOURCE. BUILD/DEFEND/RECON TARGET YOUR OWN GARRISON.
       </p>
+
+      {/* intel counter */}
+      <div className="mb-3 flex items-center justify-between border border-white/10 px-2 py-1 font-mono text-[9px] tracking-wide-2 text-white/50">
+        <span>INTEL TARGETS</span>
+        <span className={cn("font-bold", intelCount > 0 ? "text-white" : "text-white/35")}>
+          {intelCount} REVEALED
+        </span>
+      </div>
+
+      {/* mission profile list */}
       <div className="space-y-1.5">
         {types.map((t) => {
           const meta = MISSION_META[t];
-          const isArmed = armedType === t;
+          const isAttack = ATTACK_TYPES.includes(t);
+          const Icon = t === "DRONE_STRIKE" ? Crosshair
+            : t === "CYBER_ATTACK" ? Zap
+            : t === "ESPIONAGE" ? Eye
+            : t === "RECON" ? Satellite
+            : t === "BUILD" ? Hammer
+            : Shield;
           return (
             <button
               key={t}
-              onClick={() => setPending({ type: t, sourceId: null })}
-              className={cn(
-                "group w-full border p-2 text-left transition-colors",
-                isArmed
-                  ? "border-white/60 bg-white/10"
-                  : "border-white/10 hover:border-white/40 hover:bg-white/5"
-              )}
+              onClick={() => {
+                if (isAttack) {
+                  setPending({ type: t, sourceId: null });
+                } else {
+                  // self-targeted missions: go to map to pick own garrison
+                  setPending({ type: t, sourceId: null });
+                  onNav("MAP");
+                }
+              }}
+              className="group w-full border border-white/10 p-2 text-left transition-colors hover:border-white/40 hover:bg-white/5"
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] font-bold tracking-wide-2 text-white">
-                  {isArmed ? "◆ " : ""}{meta.label}
-                </span>
-                <span className="font-mono text-[8px] tracking-wide-2 text-white/40">{meta.duration}s</span>
+                <div className="flex items-center gap-1.5">
+                  <Icon size={11} strokeWidth={1.5} className="text-white/55 group-hover:text-white" />
+                  <span className="font-mono text-[10px] font-bold tracking-wide-2 text-white">{meta.label}</span>
+                </div>
+                <ChevronRight size={10} strokeWidth={1.5} className="text-white/30 group-hover:text-white/60" />
               </div>
               <div className="mt-0.5 font-mono text-[8px] leading-snug text-white/45">{meta.desc}</div>
+              <div className="mt-1 flex gap-2 font-mono text-[8px] text-white/35">
+                <span>{meta.duration}s</span>
+                {meta.cost > 0 && (
+                  <span>
+                    {isAttack ? "TGT TOKEN" : t === "BUILD" ? "VOTC" : "OWN TOKEN"} · {meta.cost}
+                  </span>
+                )}
+                {meta.cost === 0 && <span>FREE</span>}
+              </div>
             </button>
           );
         })}
       </div>
+
+      {/* source garrisons (for self-targeted missions) */}
       <div className="mt-3 border-t border-white/8 pt-3">
-        <div className="mb-1.5 flex items-center justify-between">
-          <span className="font-mono text-[9px] tracking-mega text-white/45">SOURCE GARRISONS</span>
-          {armedType && (
-            <span className="font-mono text-[8px] tracking-wide-2 text-white/55 blink">
-              ◆ {MISSION_META[armedType].label} ARMED · CLICK TO ARM SOURCE
-            </span>
-          )}
-        </div>
+        <div className="mb-1.5 font-mono text-[9px] tracking-mega text-white/45">YOUR GARRISONS</div>
         <div className="space-y-1">
           {mine.map((o) => (
             <button
               key={o.id}
               onClick={() => {
-                if (armedType) {
-                  // BUG-001 fix: arm the source so the 3-step strike flow
-                  // can complete. command-deck.tsx shows the "ARMED · CLICK
-                  // RIVAL GARRISON TO COMMIT" HUD and commits the mission
-                  // when a rival garrison is clicked on the map.
-                  setPending({ type: armedType, sourceId: o.id });
-                } else {
-                  // No mission armed — just open the garrison detail card.
-                  select(o.id);
-                }
+                select(o.id);
                 onNav("MAP");
               }}
               className="flex w-full items-center justify-between border border-white/8 px-2 py-1 font-mono text-[10px] text-white/70 hover:border-white/30 hover:text-white"

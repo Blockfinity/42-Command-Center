@@ -43,19 +43,19 @@ const PRIORITY_STYLE: Record<GarrisonBriefPriority, string> = {
  * action buttons (reinforce/defend/recon/upgrade for own garrisons;
  * strike/cyber/espionage for rival garrisons).
  *
- * Close behaviors:
- *   • click the SAME garrison again → toggle close (handled by parent's
+ * Close behaviors (PERSISTENT PANEL — no document pointerdown listener):
+ *   • click the X button → explicit close
+ *   • press ESC → close (handled by command-deck.tsx keydown effect)
+ *   • click the SAME garrison again → toggle close (parent's
  *     handleGarrisonSelect: id === selectedId → select(null))
  *   • click ANOTHER garrison → swap (parent sets new selectedId)
  *   • click EMPTY ocean on the map → close (map's general click handler)
- *   • click ANYWHERE outside the card (nav, panels, bars, body) → close
- *     (this component's pointerdown listener)
- *   • click inside the card → no-op (listener skips card subtree)
- *   • click on the map canvas → no-op here (map handles its own close logic
- *     above; skipping prevents a race with garrison-mark selection)
+ *   • click on nav rail / header / status bar / left panel → NO-OP
+ *     (the card stays open; no document-level listener to interfere)
  *
- * Positioned as an overlay in the map area (bottom-right). Free-floating
- * with a subtle backdrop-blur — no heavy container chrome.
+ * Positioned as a floating overlay on the LEFT side, next to the nav rail
+ * hot-key icons (left-14 top-20), so it never sits behind them.
+ * Responsive: full-width on mobile, fixed 320px on sm+.
  *
  * "REQUEST PRIORITY BRIEFING" — bottom section. Click → fetches a short
  * AI per-garrison brief (own = unit readiness, rival = intel snapshot)
@@ -68,30 +68,12 @@ export function GarrisonDetailCard({
   garrison: Garrison | null;
   onClose: () => void;
 }) {
+  // NOTE: No document-level pointerdown listener.
+  // The card is a PERSISTENT panel — it only closes via the X button,
+  // ESC key (command-deck.tsx), or map click (toggle/swap/empty-ocean).
+  // This prevents the "click anywhere and it disappears" bug that occurred
+  // when clicking on nav rail icons, the header, or the status bar.
   const cardRef = React.useRef<HTMLDivElement>(null);
-
-  // ---- click-outside-to-close ----
-  // Listens for pointerdown anywhere on the document. Closes the card UNLESS
-  // the click is (a) inside the card itself, or (b) inside the MapLibre map
-  // canvas — the map handles its own close semantics (garrison toggle/swap,
-  // empty-ocean close) and we must not race it.
-  React.useEffect(() => {
-    if (!garrison) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      // inside the card → keep open
-      if (cardRef.current?.contains(target)) return;
-      // inside the map canvas → let the map decide (toggle/swap/empty-close)
-      const mapEl = document.querySelector(".maplibregl-map");
-      if (mapEl?.contains(target)) return;
-      // anywhere else outside → close
-      onClose();
-    };
-    // capture phase so we evaluate before bubble handlers can stopPropagation
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [garrison, onClose]);
 
   return (
     <AnimatePresence>
@@ -102,7 +84,8 @@ export function GarrisonDetailCard({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.98 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
-          className="pointer-events-auto absolute bottom-4 right-4 z-40 flex max-h-[calc(100%-2rem)] w-80 flex-col border border-white/20 bg-black/85 backdrop-blur-md"
+          data-garrison-detail-card
+          className="pointer-events-auto absolute left-14 top-20 z-50 flex max-h-[calc(100vh-8rem)] w-[calc(100vw-4rem)] max-w-80 flex-col border border-white/20 bg-black/90 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.7)] sm:left-16 sm:w-80"
           role="dialog"
           aria-label={`Outpost ${outpostNumber(garrison.faction)} details`}
         >
