@@ -85,7 +85,7 @@ export function GarrisonDetailCard({
           exit={{ opacity: 0, y: 8, scale: 0.98 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
           data-garrison-detail-card
-          className="pointer-events-auto absolute left-14 top-20 z-50 flex max-h-[calc(100vh-8rem)] w-[calc(100vw-4rem)] max-w-80 flex-col border border-white/20 bg-black/90 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.7)] sm:left-16 sm:w-80"
+          className="hud-card hud-corners pointer-events-auto absolute left-14 top-20 z-50 flex max-h-[calc(100vh-8rem)] w-[calc(100vw-4rem)] max-w-80 flex-col sm:left-16 sm:w-80"
           role="dialog"
           aria-label={`Outpost ${outpostNumber(garrison.faction)} details`}
         >
@@ -111,8 +111,13 @@ export function GarrisonDetailCard({
               <div className="font-mono text-[12px] font-bold tracking-wide text-white">
                 {garrison.name.toUpperCase()}
               </div>
-              <div className="font-mono text-[9px] tracking-wide-2 text-white/40">
-                {garrison.lat.toFixed(2)}°, {garrison.lng.toFixed(2)}° · LV {garrison.level}
+              <div className="flex items-center gap-2 font-mono text-[9px] tracking-wide-2 text-white/40">
+                <span>{garrison.lat.toFixed(2)}°, {garrison.lng.toFixed(2)}°</span>
+                <span className="flex items-center gap-1" title={`Level ${garrison.level}`}>
+                  {[1, 2, 3].map((n) => (
+                    <span key={n} className={cn("lvl-pip", garrison.level >= n && "lvl-pip--on")} />
+                  ))}
+                </span>
               </div>
               {/* faction token indicator — each faction mints its own token
                   (HAMMER | FANG | RESOLUTE); VOTC is the network currency */}
@@ -145,15 +150,12 @@ export function GarrisonDetailCard({
                   {Math.round(garrison.health)}/{garrison.maxHealth}
                 </span>
               </div>
-              <div className="mt-1.5 h-2 w-full bg-white/8">
+              <div className="seg-track mt-1.5 h-2">
                 <div
                   className={cn(
-                    "h-full transition-all",
-                    garrison.health / garrison.maxHealth > 0.5
-                      ? "bg-white/75"
-                      : garrison.health / garrison.maxHealth > 0.2
-                        ? "bg-white/55"
-                        : "bg-white blink",
+                    "seg-fill",
+                    garrison.health / garrison.maxHealth <= 0.5 && "seg-fill--dim",
+                    garrison.health / garrison.maxHealth <= 0.2 && "blink",
                   )}
                   style={{ width: `${Math.max(0, (garrison.health / garrison.maxHealth) * 100)}%` }}
                 />
@@ -241,9 +243,9 @@ function ActionList({ garrison }: { garrison: Garrison }) {
                 });
               }}
               className={cn(
-                "flex w-full items-center justify-between border px-3 py-2 font-mono text-[10px] font-bold tracking-wide-2 transition-colors",
+                "weapon-card flex w-full items-center justify-between border px-3 py-2 font-mono text-[10px] font-bold tracking-wide-2 transition-colors",
                 canStrike
-                  ? "border-white/30 text-white hover:border-white hover:bg-white/10"
+                  ? "border-white/40 text-white hover:bg-white hover:text-black"
                   : "cursor-not-allowed border-white/10 text-white/30"
               )}
             >
@@ -356,13 +358,16 @@ function PriorityBriefing({ garrison }: { garrison: Garrison }) {
   const [brief, setBrief] = React.useState<GarrisonBrief | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  // reset whenever the garrison changes (switching garrisons in the card)
-  React.useEffect(() => {
+  // reset whenever the garrison changes (switching garrisons in the card) —
+  // "adjust state during render" pattern (avoids setState-in-effect cascades)
+  const [prevGarrisonId, setPrevGarrisonId] = React.useState(garrison.id);
+  if (prevGarrisonId !== garrison.id) {
+    setPrevGarrisonId(garrison.id);
     setOpen(false);
     setBrief(null);
     setError(null);
     setLoading(false);
-  }, [garrison.id]);
+  }
 
   async function handleRequest() {
     if (!state) return;

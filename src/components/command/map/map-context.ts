@@ -33,7 +33,7 @@ export function MapProvider({
   interaction: MapInteraction | null;
 }) {
   const value = React.useMemo(() => ({ map, interaction }), [map, interaction]);
-  return React.createElement(MapContext.Provider, { value }, children);
+  return React.createElement(MapContext.Provider, { value, children });
 }
 
 export function useMapContext(): MapContextValue {

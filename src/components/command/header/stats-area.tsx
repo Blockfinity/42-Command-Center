@@ -60,12 +60,12 @@ export function StatsArea() {
 function Stat({ label, value, unit, sub }: { label: string; value: string; unit?: string; sub: string }) {
   return (
     <div className="flex h-full flex-col justify-center gap-0.5 border-r border-white/15 px-4 leading-none">
-      <div className="text-[10px] tracking-wide-2 text-white/45">{label}</div>
+      <div className="text-[9px] tracking-mega text-white/40">{label}</div>
       <div className="flex items-baseline gap-1">
-        <span className="text-[15px] font-bold tabular-nums text-white text-glow">{value}</span>
-        {unit && <span className="text-[10px] tracking-wide-2 text-white/45">{unit}</span>}
+        <span className="num-hero text-[16px] font-bold">{value}</span>
+        {unit && <span className="text-[9px] tracking-wide-2 text-white/45">{unit}</span>}
       </div>
-      <div className="text-[9px] tracking-wide-2 text-white/35">{sub}</div>
+      <div className="text-[8px] tracking-wide-2 text-white/30">{sub}</div>
     </div>
   );
 }

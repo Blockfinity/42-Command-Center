@@ -731,7 +731,7 @@ class SfxEngine {
     return buf;
   }
 
-  private makeDistortionCurve(amount: number): Float32Array {
+  private makeDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
     const n = 1024;
     const curve = new Float32Array(n);
     const deg = Math.PI / 180;
@@ -742,7 +742,7 @@ class SfxEngine {
     return curve;
   }
 
-  private makeBitcrushCurve(levels: number): Float32Array {
+  private makeBitcrushCurve(levels: number): Float32Array<ArrayBuffer> {
     const n = 1024;
     const curve = new Float32Array(n);
     const step = levels / 2;

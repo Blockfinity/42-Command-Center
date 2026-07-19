@@ -29,27 +29,27 @@ interface UnitInfoPanelProps {
 
 type Tab = "PERFORMANCE" | "HEALTH";
 
-/** Status → dot color + label, matching the SurveilTrack status vocabulary. */
-function statusMeta(op: Garrison): { color: string; label: string } {
+/** Status → monochrome luminance + label (the deck is strictly B&W). */
+function statusMeta(op: Garrison): { color: string; label: string; blink?: boolean } {
   switch (op.status) {
     case "ONLINE":
-      return { color: "#22c55e", label: "ACTIVE" };
+      return { color: "#ffffff", label: "ACTIVE" };
     case "DEGRADED":
-      return { color: "#eab308", label: "DEGRADED" };
+      return { color: "rgba(255,255,255,0.55)", label: "DEGRADED" };
     case "UNDER_ATTACK":
-      return { color: "#ef4444", label: "UNDER FIRE" };
+      return { color: "#ffffff", label: "UNDER FIRE", blink: true };
     case "OFFLINE":
-      return { color: "#525252", label: "OFFLINE" };
+      return { color: "rgba(255,255,255,0.25)", label: "OFFLINE" };
     default:
-      return { color: "#525252", label: "UNKNOWN" };
+      return { color: "rgba(255,255,255,0.25)", label: "UNKNOWN" };
   }
 }
 
 /** Signal quality bucket from health pct (drives the "Signal" row). */
 function signalMeta(healthPct: number): { color: string; label: string } {
-  if (healthPct > 0.66) return { color: "#22c55e", label: "STRONG" };
-  if (healthPct > 0.33) return { color: "#eab308", label: "MODERATE" };
-  return { color: "#ef4444", label: "WEAK" };
+  if (healthPct > 0.66) return { color: "#ffffff", label: "STRONG" };
+  if (healthPct > 0.33) return { color: "rgba(255,255,255,0.55)", label: "MODERATE" };
+  return { color: "rgba(255,255,255,0.3)", label: "WEAK" };
 }
 
 /** Wireframe garrison-tower illustration — pure SVG, monochrome white on black. */
@@ -100,9 +100,15 @@ export function UnitInfoPanel({ garrison, visible }: UnitInfoPanelProps) {
     ? Math.round(Math.max(5, Math.min(99, (garrison.compute / 120) * 100)))
     : 0;
   const [progress, setProgress] = React.useState(0);
+  // Reset the telemetry animation when the selected garrison changes —
+  // "adjust state during render" pattern (avoids setState-in-effect).
+  const [prevGarrisonId, setPrevGarrisonId] = React.useState(garrison?.id);
+  if (garrison?.id !== prevGarrisonId) {
+    setPrevGarrisonId(garrison?.id);
+    setProgress(0);
+  }
   React.useEffect(() => {
     if (!garrison) return;
-    setProgress(0);
     let raf = 0;
     const start = performance.now();
     const dur = 1400;
@@ -129,22 +135,20 @@ export function UnitInfoPanel({ garrison, visible }: UnitInfoPanelProps) {
           exit={{ opacity: 0, x: 24, y: 8 }}
           transition={{ duration: 0.28, ease: "easeOut" }}
           className={cn(
-            "pointer-events-auto absolute z-20 w-[252px]",
-            "border border-white/25 bg-black/90 backdrop-blur-md",
+            "hud-card hud-corners pointer-events-auto absolute z-20 w-[252px]",
             "right-4 top-20",
-            "shadow-[0_0_24px_rgba(0,0,0,0.6)]",
           )}
         >
           {/* Header bar — status + unit code */}
           <div className="flex items-center gap-2 border-b border-white/15 px-3 py-2">
             <span
-              className="inline-block h-2 w-2 rounded-full"
+              className={cn("inline-block h-2 w-2 rounded-full", statusMeta(garrison).blink && "blink")}
               style={{
                 backgroundColor: statusMeta(garrison).color,
                 boxShadow: `0 0 6px ${statusMeta(garrison).color}`,
               }}
             />
-            <span className="font-mono text-[9px] tracking-[0.18em] text-white/80">
+            <span className={cn("font-mono text-[9px] tracking-[0.18em] text-white/80", statusMeta(garrison).blink && "blink")}>
               {statusMeta(garrison).label}
             </span>
             <span className="ml-auto font-mono text-[10px] tracking-[0.14em] text-white">

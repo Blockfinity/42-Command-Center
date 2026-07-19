@@ -55,9 +55,12 @@ const httpServer = createServer((req, res) => {
 });
 
 const io = new Server(httpServer, {
-  // Use the default engine.io path (/socket.io) so our own HTTP routes
-  // (/health, /state) are not intercepted. Caddy still forwards based on
-  // the XTransformPort query param.
+  // Path WITHOUT the default trailing slash: the Next.js rewrite proxy
+  // forwards "/socket.io" (no slash), and engine.io's default path check
+  // ("/socket.io/") would 404 it. A bare "/socket.io" prefix matches both
+  // forms. Our own HTTP routes (/health, /state) are unaffected. Caddy
+  // still forwards based on the XTransformPort query param.
+  path: "/socket.io",
   cors: { origin: "*", methods: ["GET", "POST"] },
   pingTimeout: 60000,
   pingInterval: 25000,

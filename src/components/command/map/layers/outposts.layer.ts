@@ -17,7 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import type maplibregl from "maplibre-gl";
-import type { FeatureCollection, Geometry } from "geojson";
+import type { FeatureCollection, Geometry, Point } from "geojson";
 import type { MapLayerSpec } from "../types";
 import { GAME_SOURCE_IDS } from "../sources/game-engine.source";
 import { makeStreetMarker } from "../utils/sprites";
@@ -171,9 +171,9 @@ export const garrisonsLayer: MapLayerSpec = {
     const fc = data as FeatureCollection<Geometry>;
     if (fc && Array.isArray(fc.features)) {
       cachedGarrisons = fc.features
-        .filter((f) => f.geometry?.type === "Point")
+        .filter((f): f is typeof f & { geometry: Point } => f.geometry?.type === "Point")
         .map((f) => {
-          const c = (f.geometry as { coordinates: [number, number] }).coordinates;
+          const c = f.geometry.coordinates as [number, number];
           return { id: (f.properties as { id: string }).id, lng: c[0], lat: c[1] };
         });
     }

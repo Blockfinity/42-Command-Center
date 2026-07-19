@@ -53,16 +53,32 @@ export function StandingsArea() {
     </>
   );
 
+  const maxStrength = Math.max(1, ...data.standings.map((s) => s.strength));
+
   return (
     <HoverDetail detail={detail} align="center">
       <div className="pointer-events-auto flex h-full flex-1 items-stretch">
         {data.standings.map((s) => (
           <div
             key={s.id}
-            className="flex h-full items-center gap-2.5 border-r border-white/15 px-4"
+            className="flex h-full flex-col justify-center gap-1 border-r border-white/15 px-4"
           >
-            <span className="text-[11px] tracking-mega text-white/55">{s.name}</span>
-            <span className="text-[15px] font-bold tabular-nums text-white">{s.strength.toString().padStart(3, "0")}</span>
+            <div className="flex items-center gap-2 leading-none">
+              <span className={`swatch swatch--${s.id}`} aria-hidden />
+              <span className="text-[10px] tracking-mega text-white/55">{s.name}</span>
+              {s.isMine && (
+                <span className="chip chip--solid !px-1 !py-0 !text-[7px]">YOU</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="num-hero text-[15px] font-bold">{s.strength.toString().padStart(3, "0")}</span>
+              <div className="seg-track w-14">
+                <div
+                  className={s.isMine ? "seg-fill" : "seg-fill seg-fill--dim"}
+                  style={{ width: `${Math.round((s.strength / maxStrength) * 100)}%` }}
+                />
+              </div>
+            </div>
           </div>
         ))}
       </div>

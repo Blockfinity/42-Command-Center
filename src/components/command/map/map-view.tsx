@@ -87,8 +87,9 @@ export function MapView({
 
     setMap(m);
 
-    // Debug hook — exposes the map instance for QA testing (zoom, inspect layers).
-    if (typeof window !== "undefined") {
+    // Debug hook — exposes the map instance for QA testing (zoom, inspect
+    // layers). Development only; never shipped to production bundles.
+    if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
       (window as unknown as { __map?: maplibregl.Map }).__map = m;
     }
 
@@ -212,20 +213,23 @@ export function MapView({
       {/* ===== HUD readouts ===== */}
 
       {/* Coordinate readout (bottom-left) */}
-      <div className="pointer-events-none absolute bottom-3 left-4 font-mono text-[9px] tracking-[0.14em] text-white/40">
+      <div className="chip pointer-events-none absolute bottom-3 left-4 !text-[8px]">
         Z{zoom.toFixed(1)} · ROT {bearing}°/{centerLat}°
       </div>
 
       {/* Network load readout (top-right) */}
       {state && (
-        <div className="pointer-events-none absolute right-4 top-3 text-right font-mono text-[9px] tracking-[0.14em] text-white/40">
+        <div className="chip pointer-events-none absolute right-4 top-3 !text-[8px]">
           NET LOAD · {state.networkLoad}M ACT/S · {formatTotalActions(state.totalActions)} TOTAL
         </div>
       )}
 
       {/* Territory control summary (bottom-center) */}
-      <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 font-mono text-[9px] tracking-[0.14em] text-white/40">
-        FANG {territorySummary.FANG} · HAMMER {territorySummary.HAMMER} · RESOLUTE {territorySummary.RESOLUTE} · CONTESTED {territorySummary.CONTESTED}
+      <div className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2">
+        <span className="chip !text-[8px]"><span className="swatch swatch--FANG !h-[7px] !w-[10px]" /> {territorySummary.FANG}</span>
+        <span className="chip !text-[8px]"><span className="swatch swatch--HAMMER !h-[7px] !w-[10px]" /> {territorySummary.HAMMER}</span>
+        <span className="chip !text-[8px]"><span className="swatch swatch--RESOLUTE !h-[7px] !w-[10px]" /> {territorySummary.RESOLUTE}</span>
+        <span className="chip chip--dim !text-[8px]">CONTESTED {territorySummary.CONTESTED}</span>
       </div>
 
       {/* Placement hint */}

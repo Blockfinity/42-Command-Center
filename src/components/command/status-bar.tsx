@@ -24,6 +24,8 @@ export function StatusBar() {
   const activeMissions = state.missions.filter((m) => m.status === "ACTIVE").length;
   const underAttack = state.garrisons.filter((o) => o.status === "UNDER_ATTACK").length;
   const offline = state.garrisons.filter((o) => o.status === "OFFLINE").length;
+  const wallet = state.operative.wallet;
+  const myToken = state.operative.faction;
 
   const tickerItems = [
     `SOL ${state.sol}`,
@@ -42,11 +44,20 @@ export function StatusBar() {
 
   return (
     <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex h-9 items-stretch font-mono text-[10px] tracking-wide-2">
-      {/* left fixed metrics */}
-      <div className="pointer-events-auto hidden items-center gap-5 bg-black/50 px-4 text-white/55 backdrop-blur-sm sm:flex">
-        <span>OPS {activeMissions.toString().padStart(2, "0")}</span>
+      {/* left fixed metrics + war chest */}
+      <div className="pointer-events-auto hidden items-center gap-4 bg-black/50 px-4 text-white/55 backdrop-blur-sm sm:flex">
+        <span>OPS <span className="num-hero font-bold text-white/85">{activeMissions.toString().padStart(2, "0")}</span></span>
         <span className={cn(underAttack > 0 ? "text-white blink" : "text-white/55")}>FIRE {underAttack}</span>
         <span>DOWN {offline}</span>
+        <span className="h-3 w-px bg-white/15" />
+        <span className="flex items-center gap-1.5" title="VOTC — network currency">
+          <span className="text-white/30">VOTC</span>
+          <span className="num-hero font-bold text-white/90">{Math.floor(wallet.VOTC)}</span>
+        </span>
+        <span className="flex items-center gap-1.5" title={`${myToken} — faction token`}>
+          <span className="text-white/30">{myToken}</span>
+          <span className="num-hero font-bold text-white/90">{Math.floor(wallet[myToken])}</span>
+        </span>
       </div>
 
       {/* ticker */}

@@ -27,7 +27,7 @@ import { buildRasterSource, buildVectorSource } from "./tile-provider";
 // ---- Static world data (computed once at module scope) ----
 const worldFeat = feature(
   worldTopo as never,
-  (worldTopo as never).objects.countries,
+  (worldTopo as unknown as { objects: { countries: never } }).objects.countries,
 ) as unknown as FeatureCollection<Geometry>;
 
 const oceanFeature: GeoJSON.Feature = {
@@ -57,7 +57,7 @@ export interface MapController {
  * Returns the controller with resetHome + destroy helpers.
  */
 export function createMap(opts: CreateMapOptions): MapController {
-  const { container, center, zoom = 1.584 } = opts;
+  const { container, center, zoom = 1.9 } = opts;
 
   // Stash the home camera so resetHome() can ease back to exactly the boot view.
   const homeCamera = {
@@ -180,7 +180,8 @@ export function createMap(opts: CreateMapOptions): MapController {
     // handler below that zooms 3 levels (not the default 1) centered on the
     // click point.
     doubleClickZoom: false,
-    antialias: true,
+    // MapLibre v5 moved antialiasing control into canvasContextAttributes.
+    canvasContextAttributes: { antialias: true },
   });
 
   // ---- Custom double-click: zoom 3 levels toward the click point ----

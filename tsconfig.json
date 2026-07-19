@@ -37,6 +37,11 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    // Standalone sample servers + the game-engine mini-service are separate
+    // packages with their own dependencies — they are executed via tsx and
+    // must not be type-checked against the web app's module graph.
+    "examples",
+    "mini-services"
   ]
 }

@@ -10,11 +10,9 @@ export async function GET() {
     if (!res.ok) throw new Error(`engine ${res.status}`);
     const state = (await res.json()) as GameState;
     return NextResponse.json(state);
-  } catch (e: {
-    message?: string;
-  }) {
+  } catch (e) {
     return NextResponse.json(
-      { error: "engine-unavailable", detail: e?.message },
+      { error: "engine-unavailable", detail: e instanceof Error ? e.message : String(e) },
       { status: 503 }
     );
   }

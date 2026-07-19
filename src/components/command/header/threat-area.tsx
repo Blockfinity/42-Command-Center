@@ -48,6 +48,9 @@ export function ThreatArea() {
     (m) => m.status === "ACTIVE" && m.faction !== state.operative.faction,
   ).length;
 
+  const LEVELS: ThreatLevel[] = ["GREEN", "AMBER", "RED", "BLACK"];
+  const activeIdx = LEVELS.indexOf(data.level);
+
   return (
     <HoverDetail detail={
       <>
@@ -61,13 +64,28 @@ export function ThreatArea() {
         <DetailNote>{detail.guidance}</DetailNote>
       </>
     } align="left">
-      <div className="pointer-events-auto flex h-full items-center gap-2.5 border-r border-white/15 px-4">
-        <span className={cn(data.pip, data.critical ? "pip--crit" : "pip")} />
-        <div className="flex flex-col gap-0.5 leading-none">
-          <div className="text-[10px] tracking-wide-2 text-white/45">THREAT LEVEL</div>
-          <div className="text-[15px] font-bold tracking-wide-2 text-white text-glow">
+      <div className="pointer-events-auto flex h-full items-center gap-3 border-r border-white/15 px-4">
+        <div className="flex flex-col gap-1 leading-none">
+          <div className="text-[9px] tracking-mega text-white/40">THREAT LEVEL</div>
+          <div className={cn("num-hero text-[17px] font-bold tracking-wide-2", data.critical && "blink")}>
             {data.label}
           </div>
+        </div>
+        {/* 4-segment gauge — lit up to the active level */}
+        <div className="flex items-end gap-[3px]" aria-hidden>
+          {LEVELS.map((lv, i) => (
+            <span
+              key={lv}
+              className={cn(
+                "w-[5px] transition-colors",
+                i === 0 ? "h-2" : i === 1 ? "h-3" : i === 2 ? "h-4" : "h-5",
+                i <= activeIdx
+                  ? "bg-white shadow-[0_0_6px_rgba(255,255,255,0.7)]"
+                  : "bg-white/12",
+                i === activeIdx && data.critical && "blink",
+              )}
+            />
+          ))}
         </div>
       </div>
     </HoverDetail>

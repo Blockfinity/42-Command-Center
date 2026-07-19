@@ -240,5 +240,5 @@ export function LayerHost({ map, interaction, children }: LayerHostProps) {
     }
   }, [map]);
 
-  return React.createElement(MapProvider, { map, interaction }, children);
+  return React.createElement(MapProvider, { map, interaction, children });
 }

@@ -5,6 +5,7 @@ import { useCommand } from "@/stores/command";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav/nav-registry";
 import { NavButton } from "./nav/nav-button";
+import { listIntelTargets } from "@/lib/strike-plan";
 import type { NavView } from "./nav/nav-types";
 
 // Re-export so existing imports (`import type { NavView } from "./nav-rail"`)
@@ -12,17 +13,15 @@ import type { NavView } from "./nav/nav-types";
 export type { NavView };
 
 /**
- * NavRail — free-floating icon sidebar orchestrator (no container/background).
+ * NavRail — free-floating icon sidebar orchestrator.
  *
- * Renders the nav items declared in `nav/nav-registry.ts` in order. Each item
- * is an independent component that wraps the shared `NavButton` shell — this
- * file owns no icon definitions.
+ * Renders the nav items declared in `nav/nav-registry.ts` in order. Each
+ * button carries a live gamified badge where the view has actionable
+ * content: STRIKE → revealed intel targets, QUEUE → active missions,
+ * FEED → critical events awaiting review.
  *
  * The footer hosts the live uplink indicator (pip + "LIVE"/"NO LINK" label),
- * driven by the command store's `connected` flag (the same socket state the
- * old header LINK readout used).
- *
- * To add / remove / reorder nav items, edit `nav/nav-registry.ts` only.
+ * driven by the command store's `connected` flag.
  */
 export function NavRail({
   view,
@@ -32,9 +31,20 @@ export function NavRail({
   onChange: (v: NavView) => void;
 }) {
   const connected = useCommand((s) => s.connected);
+  const state = useCommand((s) => s.state);
+
+  // Live badge counts per view (gamified "there's something here" signals).
+  const badges = React.useMemo(() => {
+    const b: Partial<Record<NavView, number>> = {};
+    if (!state) return b;
+    b.STRIKE = listIntelTargets(state).length;
+    b.QUEUE = state.missions.filter((m) => m.status === "ACTIVE").length;
+    b.FEED = state.events.filter((e) => e.severity === "CRITICAL").length;
+    return b;
+  }, [state]);
 
   return (
-    <nav className="pointer-events-none absolute left-0 top-20 z-30 flex w-14 shrink-0 flex-col items-center gap-1.5 py-2.5">
+    <nav className="pointer-events-none absolute left-2 top-20 z-30 flex w-12 shrink-0 flex-col items-center gap-2 py-2.5">
       {NAV_ITEMS.map(({ view: itemView, icon, label, hotkey }) => (
         <NavButton
           key={itemView}
@@ -42,6 +52,7 @@ export function NavRail({
           icon={icon}
           label={label}
           hotkey={hotkey}
+          badge={badges[itemView]}
           onChange={() => onChange(itemView)}
         />
       ))}

@@ -47,7 +47,9 @@ export function CommandDeck() {
   // forcing the effect to re-subscribe every render (sfx is a new object
   // each render, but sfx.play is stable via useCallback([])).
   const playRef = React.useRef(sfx.play);
-  playRef.current = sfx.play;
+  React.useEffect(() => {
+    playRef.current = sfx.play;
+  });
 
   const [view, setView] = React.useState<NavView | null>(null);
   const [started, setStarted] = React.useState(false);
@@ -200,6 +202,14 @@ export function CommandDeck() {
 
   const hasState = !!state;
 
+  // ---- stage effects (gamified, threat-reactive) ----
+  const threatLevel = state?.threatLevel ?? "GREEN";
+  const myUnderFire = state
+    ? state.garrisons.filter((o) => o.faction === state.operative.faction && o.status === "UNDER_ATTACK").length
+    : 0;
+  const strikeArmed = !!pending;
+  const reticleActive = strikeArmed || !!placement;
+
   // ---- compute initial map center from operative's home garrison ----
   const initialCenter: [number, number] = React.useMemo(() => {
     if (!state) return [-32, 8];
@@ -238,6 +248,35 @@ export function CommandDeck() {
               placementMode={!!placement}
             />
 
+            {/* Threat-reactive vignette — edges pulse when the war heats up */}
+            {(threatLevel === "RED" || threatLevel === "BLACK") && (
+              <div className={threatLevel === "BLACK" ? "threat-vignette threat-vignette--black" : "threat-vignette"} />
+            )}
+
+            {/* Stage frame corner brackets */}
+            <span className="stage-corner stage-corner--tl" />
+            <span className="stage-corner stage-corner--tr" />
+            <span className="stage-corner stage-corner--bl" />
+            <span className="stage-corner stage-corner--br" />
+
+            {/* Targeting reticle — shown while a strike/placement is armed */}
+            {reticleActive && (
+              <div className="pointer-events-none absolute left-1/2 top-1/2 z-30 h-[46vmin] w-[46vmin] -translate-x-1/2 -translate-y-1/2">
+                <span className="reticle-cross-h" />
+                <span className="reticle-cross-v" />
+                <span className="reticle-ring reticle-ring--outer" />
+                <span className="reticle-ring reticle-ring--inner" />
+                <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)]" />
+              </div>
+            )}
+
+            {/* Under-fire alert — own garrisons taking hits */}
+            {myUnderFire > 0 && (
+              <div className="alert-banner pointer-events-none absolute left-1/2 top-20 z-30 -translate-x-1/2 px-4 py-1.5 font-mono text-[10px] font-bold tracking-mega text-white">
+                ▲ {myUnderFire} GARRISON{myUnderFire > 1 ? "S" : ""} UNDER FIRE ▲
+              </div>
+            )}
+
             {/* HUD corner overlays */}
             {state && (
               <>
@@ -250,12 +289,12 @@ export function CommandDeck() {
                   </div>
                 )}
                 {placement && (
-                  <div className="pointer-events-none absolute bottom-16 left-1/2 -translate-x-1/2 border border-white/30 bg-black/70 px-4 py-1.5 font-mono text-[10px] tracking-wide-2 text-white backdrop-blur">
-                    ● PLACEMENT ARMED · {placement.type} · CLICK TO EMPLACE
+                  <div className="alert-banner pointer-events-none absolute bottom-16 left-1/2 z-30 -translate-x-1/2 px-4 py-1.5 font-mono text-[10px] tracking-wide-2 text-white">
+                    ● PLACEMENT ARMED · {placement.type.toUpperCase()} · CLICK GLOBE TO EMPLACE
                   </div>
                 )}
                 {pending && pending.sourceId && (
-                  <div className="pointer-events-none absolute bottom-16 left-1/2 -translate-x-1/2 border border-white/30 bg-black/70 px-4 py-1.5 font-mono text-[10px] tracking-wide-2 text-white backdrop-blur">
+                  <div className="alert-banner pointer-events-none absolute bottom-16 left-1/2 z-30 -translate-x-1/2 px-4 py-1.5 font-mono text-[10px] tracking-wide-2 text-white">
                     ◆ {MISSION_META[pending.type].label} ARMED · CLICK RIVAL GARRISON TO COMMIT
                   </div>
                 )}

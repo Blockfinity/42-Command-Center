@@ -2292,3 +2292,66 @@ Stage Summary:
 - **Token economy**: intact (strike-plan.ts + types.ts wallet/intel/CurrencyId + game-engine accrueWallet + ESPIONAGE reveals intel + mission costs deducted).
 - **Header**: no wallet balances (WalletArea unregistered). Faction strength standings remain.
 - **3 factions only**: FANG / HAMMER / RESOLUTE.
+
+---
+Task ID: OBSIDIAN-HUD-1
+Agent: Kimi
+Task: Production hardening + Obsidian HUD redesign (gamified monochrome command deck).
+
+Work Log:
+- REVIEW: main branch held the full platform (master was a stub). Read
+  PLATFORM-REPORT.md + worklog; goals = monochrome cinematic RTS command
+  interface on a real 1:1 globe, professional-surveillance fidelity.
+- PROD FIX: production build never passed — fixed 8 type-check blockers
+  (tsconfig excluded examples/ + mini-services/, catch-clause typing in
+  /api/state, React 19 children-in-props for MapProvider, deleted 8 dead
+  legacy layer placeholders + 8 dead nav-item components + dead
+  right-panel/world-map/uplink-gate/client-deck/boot-shell/boot-wallpaper,
+  GeoJSON Point narrowing in outposts.layer, topojson cast, MapLibre v5
+  canvasContextAttributes, Float32Array<ArrayBuffer> in sfx, format.ts
+  re-export scope).
+- PROD FIX: socket never connected through the Next rewrite proxy (trailing
+  slash stripped; engine.io default path 404'd) — engine now accepts the
+  bare /socket.io prefix and rewrite destinations keep the slash. Uplink
+  shows LIVE in both dev and standalone production.
+- PROD FIX: .env had a hardcoded absolute DATABASE_URL (/home/z/...) —
+  now repo-relative + .env.example added. Prisma query logging silenced in
+  production. window.__map debug hook gated to development.
+- PROD FIX: 5 react-hooks/set-state-in-effect + refs-in-render lint errors
+  (playRef, unit-info-panel, PriorityBriefing, carousel, use-mobile →
+  useSyncExternalStore). eslint src = clean.
+- DELIVERY: Dockerfile + .dockerignore + scripts/start-production.mjs
+  (single container: tsx engine + Next standalone, no bun dependency).
+  README rewritten with run instructions.
+- REDESIGN (Obsidian HUD, strictly monochrome): new design-system layer in
+  globals.css (hud-card + 4-corner brackets, segmented bars, barber-pole
+  mission stripes, chips, xp track, swatch faction coding, threat vignette,
+  targeting reticle, alert banners, weapon-card sweep, level pips, nav
+  badges/notch, luminous numerals).
+- Header: threat = 4-segment gauge; standings = swatch + proportional seg
+  bars + YOU chip; profile = wallet chips (VOTC + faction token) + authority
+  progression bar toward next clearance tier; stats typography upgraded.
+- NavRail: live count badges (STRIKE intel targets, QUEUE active ops, FEED
+  critical events), hotkey numerals, active notch, hud tooltips.
+- LeftPanel: full rebuild — bracketed hud-card shell with indexed header;
+  strike console = weapon cards (class tags, cost chips, sweep hover);
+  step-2 target cards with segmented hull bars + COMMIT buttons; queue =
+  animated stripe progress + outcome chips; feed = kill-feed glyphs +
+  crit flash; intel = faction dossiers; AI = executable recommendations
+  (EXECUTE parses launch:TYPE:src:tgt) with confidence bars; deploy =
+  node-class cards with capability ratings.
+- Stage: threat-reactive edge vignette (RED/BLACK), full-screen targeting
+  reticle while strike/placement armed, under-fire alert banner, stage
+  corner brackets, territory swatch chips, bigger globe (zoom 1.584 → 1.9).
+- GarrisonDetailCard + UnitInfoPanel: hud-card chrome, segmented hull bars,
+  level pips; UnitInfoPanel status colors converted green/yellow/red →
+  monochrome luminance (design-system compliance).
+- Verified: eslint clean, next build green, production launcher serves
+  web+engine+socket proxy; browser QA on production build (uplink LIVE,
+  panels, armed reticle, queue stripes, dossiers).
+
+Stage Summary:
+- Repo is now production-grade (build + lint green, one-container runtime,
+  no dead code) and the deck is a gamified monochrome HUD: threat gauge,
+  war-chest wallets, clearance progression, live badges, reticle/vignette
+  stage effects, weapon-card strike console, dossier intel.

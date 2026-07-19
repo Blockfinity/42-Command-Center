@@ -21,7 +21,10 @@ const nextConfig: NextConfig = {
     // "/socket.io/" with an EMPTY path segment, which "/socket.io/:path*"
     // alone does not match.
     return [
-      { source: "/socket.io", destination: "http://localhost:3003/socket.io" },
+      // NOTE: destinations must keep the trailing slash — engine.io's path
+      // check rejects "/socket.io" without it, and Next source-matching
+      // normalizes the request path's trailing slash away.
+      { source: "/socket.io", destination: "http://localhost:3003/socket.io/" },
       { source: "/socket.io/", destination: "http://localhost:3003/socket.io/" },
       { source: "/socket.io/:path*", destination: "http://localhost:3003/socket.io/:path*" },
       { source: "/engine/:path*", destination: "http://localhost:3003/:path*" },

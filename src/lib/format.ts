@@ -1,14 +1,21 @@
 import type { FactionId, Garrison, ThreatLevel } from "@/lib/types";
 
 // Faction constants (FACTION_MARK_GLYPH, FACTION_OUTPOST_NUMBER, outpostNumber,
-// outpostNumberStr) now live in @/lib/factions — re-exported here for backward
-// compatibility with existing imports from @/lib/format.
-export {
+// outpostNumberStr) now live in @/lib/factions — imported here and re-exported
+// for backward compatibility with existing imports from @/lib/format.
+import {
   FACTION_MARK_GLYPH,
   FACTION_OUTPOST_NUMBER,
   outpostNumber,
   outpostNumberStr,
 } from "@/lib/factions";
+
+export {
+  FACTION_MARK_GLYPH,
+  FACTION_OUTPOST_NUMBER,
+  outpostNumber,
+  outpostNumberStr,
+};
 
 export function fmtUptime(ms: number): string {
   const s = Math.floor(ms / 1000);
