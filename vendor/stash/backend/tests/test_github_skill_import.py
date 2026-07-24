@@ -1,0 +1,231 @@
+"""Tests for the GitHub skill importer that bootstraps Discover.
+
+GitHub fetchers are monkeypatched with an in-memory fake repo; everything
+downstream (curator seeding, folder/page creation, publish, idempotent
+re-import) runs against the real services and DB.
+"""
+
+import pytest
+from httpx import AsyncClient
+
+from backend.services import github_skill_import as gsi
+
+COOKING_SKILL_MD = b"""---
+name: Cooking Wizard
+description: Plan and cook a full menu.
+---
+
+Use references/guide.md for techniques.
+"""
+
+FAKE_REPO = {
+    "README.md": b"# Not a skill\n",
+    "cooking/SKILL.md": COOKING_SKILL_MD,
+    "cooking/references/guide.md": b"# Techniques\n",
+    "cooking/logo.png": b"\x89PNG fake bytes",
+    "baking/SKILL.md": b"Just a body, no frontmatter.\n",
+}
+
+
+def _fake_github(monkeypatch, files: dict[str, bytes], branch: str = "main") -> None:
+    async def fake_branch(client, owner, repo, token=None):
+        return branch
+
+    async def fake_tree(client, owner, repo, ref, token=None):
+        return [{"path": p, "type": "blob", "size": len(b)} for p, b in files.items()]
+
+    async def fake_blob(client, owner, repo, ref, path, token=None):
+        return files[path]
+
+    monkeypatch.setattr(gsi, "_fetch_default_branch", fake_branch)
+    monkeypatch.setattr(gsi, "_fetch_tree", fake_tree)
+    monkeypatch.setattr(gsi, "_fetch_blob", fake_blob)
+
+
+async def _import_repo(repo_url: str) -> list[str]:
+    owner_user_id, owner_id = await gsi.ensure_curator()
+    results = []
+    for skill in await gsi.fetch_repo_skills(repo_url):
+        results.append(
+            await gsi.import_skill(
+                owner_user_id,
+                owner_id,
+                source_url=skill["source_url"],
+                fallback_title=skill["fallback_title"],
+                files=skill["files"],
+            )
+        )
+    return results
+
+
+def test_parse_repo_url():
+    assert gsi.parse_repo_url("https://github.com/acme/skills") == ("acme", "skills")
+    assert gsi.parse_repo_url("https://github.com/acme/skills.git/") == ("acme", "skills")
+    with pytest.raises(ValueError):
+        gsi.parse_repo_url("https://gitlab.com/acme/skills")
+
+
+def test_discover_skill_dirs_finds_root_and_nested():
+    tree = [
+        {"path": "SKILL.md", "type": "blob"},
+        {"path": "sub/SKILL.md", "type": "blob"},
+        {"path": "sub/deep/notes.md", "type": "blob"},
+        {"path": "plain/README.md", "type": "blob"},
+        {"path": "plain", "type": "tree"},
+    ]
+    assert gsi.discover_skill_dirs(tree) == ["", "sub"]
+
+
+@pytest.mark.asyncio
+async def test_import_publishes_discoverable_skills(client: AsyncClient, pool, monkeypatch):
+    _fake_github(monkeypatch, FAKE_REPO)
+    results = await _import_repo("https://github.com/acme/skills")
+    assert results == ["created", "created"]
+
+    resp = await client.get("/api/v1/discover/skills", params={"sort": "newest"})
+    assert resp.status_code == 200
+    by_title = {s["title"]: s for s in resp.json()["skills"]}
+
+    cooking = by_title["Cooking Wizard"]
+    assert cooking["description"] == "Plan and cook a full menu."
+    assert cooking["source_github_url"] == "https://github.com/acme/skills/tree/main/cooking"
+    baking = by_title["baking"]
+    assert baking["source_github_url"] == "https://github.com/acme/skills/tree/main/baking"
+
+    # SKILL.md keeps its exact filename (skill detection depends on it) and
+    # nested reference docs land in a child folder, not the scope root.
+    skill_folder = await pool.fetchval(
+        "SELECT folder_id FROM skills WHERE id = $1::uuid", cooking["id"]
+    )
+    skill_md = await pool.fetchrow(
+        "SELECT name FROM pages WHERE folder_id = $1 AND name = 'SKILL.md'", skill_folder
+    )
+    assert skill_md is not None
+    guide_folder = await pool.fetchrow(
+        "SELECT id FROM folders WHERE parent_folder_id = $1 AND name = 'references'",
+        skill_folder,
+    )
+    assert guide_folder is not None
+    guide = await pool.fetchval("SELECT name FROM pages WHERE folder_id = $1", guide_folder["id"])
+    assert guide == "guide.md"
+
+
+@pytest.mark.asyncio
+async def test_reimport_updates_in_place(client: AsyncClient, pool, monkeypatch):
+    _fake_github(monkeypatch, FAKE_REPO)
+    await _import_repo("https://github.com/acme/skills")
+
+    resp = await client.get("/api/v1/discover/skills", params={"q": "Cooking"})
+    first = next(s for s in resp.json()["skills"] if s["title"] == "Cooking Wizard")
+
+    updated_repo = {
+        "cooking/SKILL.md": b"---\nname: Cooking Pro\ndescription: New blurb.\n---\nBody.\n",
+        "cooking/CHANGELOG.md": b"v2\n",
+        "baking/SKILL.md": FAKE_REPO["baking/SKILL.md"],
+    }
+    _fake_github(monkeypatch, updated_repo)
+    results = await _import_repo("https://github.com/acme/skills")
+    assert results == ["updated", "updated"]
+
+    resp = await client.get("/api/v1/discover/skills", params={"q": "Cooking"})
+    second = next(s for s in resp.json()["skills"] if "Cooking" in s["title"])
+    assert second["id"] == first["id"]
+    assert second["slug"] == first["slug"]
+    assert second["title"] == "Cooking Pro"
+    assert second["description"] == "New blurb."
+
+    # Old contents are gone, replaced by the new tree — and nothing orphaned
+    # into the scope root (pages/files folder FKs are SET NULL on folder
+    # delete, which a naive folder-only delete would trigger).
+    folder_id = await pool.fetchval(
+        "SELECT folder_id FROM skills WHERE id = $1::uuid", second["id"]
+    )
+    names = {
+        r["name"]
+        for r in await pool.fetch("SELECT name FROM pages WHERE folder_id = $1", folder_id)
+    }
+    assert names == {"SKILL.md", "CHANGELOG.md"}
+    owner_user_id = await pool.fetchval(
+        "SELECT owner_user_id FROM skills WHERE id = $1::uuid", second["id"]
+    )
+    orphans = await pool.fetchval(
+        "SELECT COUNT(*) FROM pages WHERE owner_user_id = $1 AND folder_id IS NULL",
+        owner_user_id,
+    )
+    assert orphans == 0
+
+
+@pytest.mark.asyncio
+async def test_import_requires_skill_md(pool):
+    owner_user_id, owner_id = await gsi.ensure_curator()
+    with pytest.raises(ValueError, match="no SKILL.md"):
+        await gsi.import_skill(
+            owner_user_id,
+            owner_id,
+            source_url="https://github.com/acme/empty",
+            fallback_title="empty",
+            files=[("README.md", b"hi")],
+        )
+
+
+@pytest.mark.asyncio
+async def test_import_repo_for_user_copies_whole_repo(client: AsyncClient, pool, monkeypatch):
+    """The user-facing import is a straight copy: one root folder named after
+    the repo, full structure preserved, and SKILL.md folders derive as skills."""
+    from uuid import UUID
+
+    from .conftest import unique_name
+
+    _fake_github(monkeypatch, FAKE_REPO)
+    reg = await client.post(
+        "/api/v1/users/register",
+        json={"name": unique_name("importer"), "password": "securepassword1"},
+    )
+    assert reg.status_code == 201
+    user_id, api_key = reg.json()["id"], reg.json()["api_key"]
+
+    result = await gsi.import_repo_for_user(UUID(user_id), "https://github.com/acme/skills")
+
+    assert result["name"] == "skills"
+    assert result["files"] == len(FAKE_REPO)
+    root_id = UUID(result["folder_id"])
+    readme = await pool.fetchval(
+        "SELECT id FROM pages WHERE folder_id = $1 AND name = 'README.md'", root_id
+    )
+    assert readme is not None
+    cooking = await pool.fetchval(
+        "SELECT id FROM folders WHERE parent_folder_id = $1 AND name = 'cooking'", root_id
+    )
+    assert cooking is not None
+
+    skills = await client.get("/api/v1/me/skills", headers={"Authorization": f"Bearer {api_key}"})
+    names = {s["name"] for s in skills.json()["skills"]}
+    assert "Cooking Wizard" in names  # derived from the copied SKILL.md, no publish record
+
+
+@pytest.mark.asyncio
+async def test_inspect_reports_skill_dirs_before_import(client: AsyncClient, monkeypatch):
+    """The import dialog warns on section mismatch using this tree-only look."""
+    from .conftest import unique_name
+
+    _fake_github(monkeypatch, FAKE_REPO)
+    reg = await client.post(
+        "/api/v1/users/register",
+        json={"name": unique_name("inspector"), "password": "securepassword1"},
+    )
+    auth = {"Authorization": f"Bearer {reg.json()['api_key']}"}
+
+    resp = await client.get(
+        "/api/v1/me/import/github/inspect",
+        params={"repo_url": "https://github.com/acme/skills"},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"skill_dirs": ["baking", "cooking"]}
+
+    bad = await client.get(
+        "/api/v1/me/import/github/inspect",
+        params={"repo_url": "https://gitlab.com/acme/skills"},
+        headers=auth,
+    )
+    assert bad.status_code == 400

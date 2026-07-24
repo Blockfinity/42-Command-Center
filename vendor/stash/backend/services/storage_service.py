@@ -1,0 +1,290 @@
+"""Storage service: S3-compatible async file storage.
+
+Supports AWS S3, MinIO, Cloudflare R2, and other S3-compatible services.
+Configured via environment variables.
+"""
+
+import logging
+import os
+from datetime import UTC
+from urllib.parse import quote
+from uuid import uuid4
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+S3_BUCKET = os.getenv("S3_BUCKET", "")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "")
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
+S3_REGION = os.getenv("S3_REGION", "us-east-1")
+
+# Separate bucket with public read access (R2 has no per-object ACLs, so
+# public objects can't share the private bucket). Objects are addressed by
+# 128-bit random keys — the key IS the access control. Used for archived
+# clip images, which must load from a plain <img> tag with no auth header.
+S3_PUBLIC_BUCKET = os.getenv("S3_PUBLIC_BUCKET", "")
+S3_PUBLIC_BASE_URL = os.getenv("S3_PUBLIC_BASE_URL", "")
+
+_client: httpx.AsyncClient | None = None
+
+
+def is_configured() -> bool:
+    return bool(S3_BUCKET and S3_ENDPOINT and S3_ACCESS_KEY and S3_SECRET_KEY)
+
+
+def public_media_enabled() -> bool:
+    return bool(is_configured() and S3_PUBLIC_BUCKET and S3_PUBLIC_BASE_URL)
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=60.0)
+    return _client
+
+
+def _storage_key(owner_user_id: str | None, filename: str) -> str:
+    """Generate a unique storage key: {owner_or_personal}/{uuid}/{filename}."""
+    prefix = str(owner_user_id) if owner_user_id else "personal"
+    return f"{prefix}/{uuid4().hex[:12]}/{filename}"
+
+
+def _object_uri(key: str) -> str:
+    """Percent-encode key path segments so filenames with spaces or '#'
+    still produce a valid request URI / signed URL."""
+    return f"/{S3_BUCKET}/{quote(key, safe='/')}"
+
+
+async def upload_file(
+    owner_user_id: str | None,
+    filename: str,
+    content: bytes,
+    content_type: str,
+) -> str:
+    """Upload a file to S3. Returns the storage key."""
+    if not is_configured():
+        raise RuntimeError("S3 storage is not configured")
+
+    key = _storage_key(owner_user_id, filename)
+    await _signed_put(S3_BUCKET, key, content, content_type)
+    return key
+
+
+async def upload_public_image(filename: str, content: bytes, content_type: str) -> str:
+    """Store an archived clip image in the public media bucket. Returns the
+    stable public URL (no expiry — safe to embed in page content)."""
+    if not public_media_enabled():
+        raise RuntimeError("Public media storage is not configured")
+    key = f"{uuid4().hex}/{filename}"
+    await _signed_put(S3_PUBLIC_BUCKET, key, content, content_type)
+    return f"{S3_PUBLIC_BASE_URL.rstrip('/')}/{quote(key, safe='/')}"
+
+
+async def _signed_put(bucket: str, key: str, content: bytes, content_type: str) -> None:
+    """SigV4-signed S3 PUT via the REST API directly (no boto dependency)."""
+    import hashlib
+    import hmac
+    from datetime import datetime
+
+    now = datetime.now(UTC)
+    date_stamp = now.strftime("%Y%m%d")
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+
+    # Canonical request components
+    host = S3_ENDPOINT.replace("https://", "").replace("http://", "").rstrip("/")
+    scheme = "https" if S3_ENDPOINT.startswith("https") else "http"
+    uri = f"/{bucket}/{quote(key, safe='/')}"
+
+    payload_hash = hashlib.sha256(content).hexdigest()
+
+    headers_to_sign = {
+        "host": host,
+        "x-amz-content-sha256": payload_hash,
+        "x-amz-date": amz_date,
+        "content-type": content_type,
+    }
+    signed_headers = ";".join(sorted(headers_to_sign.keys()))
+    canonical_headers = "".join(f"{k}:{v}\n" for k, v in sorted(headers_to_sign.items()))
+
+    canonical_request = f"PUT\n{uri}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+
+    credential_scope = f"{date_stamp}/{S3_REGION}/s3/aws4_request"
+    string_to_sign = (
+        f"AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n"
+        + hashlib.sha256(canonical_request.encode()).hexdigest()
+    )
+
+    def _sign(key_bytes: bytes, msg: str) -> bytes:
+        return hmac.new(key_bytes, msg.encode(), hashlib.sha256).digest()
+
+    signing_key = _sign(
+        _sign(
+            _sign(
+                _sign(f"AWS4{S3_SECRET_KEY}".encode(), date_stamp),
+                S3_REGION,
+            ),
+            "s3",
+        ),
+        "aws4_request",
+    )
+    signature = hmac.new(signing_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+
+    auth_header = (
+        f"AWS4-HMAC-SHA256 Credential={S3_ACCESS_KEY}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, Signature={signature}"
+    )
+
+    client = _get_client()
+    resp = await client.put(
+        f"{scheme}://{host}{uri}",
+        content=content,
+        headers={
+            "Authorization": auth_header,
+            "x-amz-content-sha256": payload_hash,
+            "x-amz-date": amz_date,
+            "Content-Type": content_type,
+        },
+    )
+    resp.raise_for_status()
+
+
+async def get_file_url(key: str, expires_in: int = 3600) -> str:
+    """Generate a presigned GET URL for a storage key."""
+    if not is_configured():
+        raise RuntimeError("S3 storage is not configured")
+
+    import hashlib
+    import hmac
+    from datetime import datetime
+
+    now = datetime.now(UTC)
+    date_stamp = now.strftime("%Y%m%d")
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+
+    host = S3_ENDPOINT.replace("https://", "").replace("http://", "").rstrip("/")
+    scheme = "https" if S3_ENDPOINT.startswith("https") else "http"
+    uri = _object_uri(key)
+
+    credential_scope = f"{date_stamp}/{S3_REGION}/s3/aws4_request"
+    credential = f"{S3_ACCESS_KEY}/{credential_scope}"
+
+    query_params = (
+        f"X-Amz-Algorithm=AWS4-HMAC-SHA256"
+        f"&X-Amz-Credential={quote(credential, safe='')}"
+        f"&X-Amz-Date={amz_date}"
+        f"&X-Amz-Expires={expires_in}"
+        f"&X-Amz-SignedHeaders=host"
+    )
+
+    canonical_request = f"GET\n{uri}\n{query_params}\nhost:{host}\n\nhost\nUNSIGNED-PAYLOAD"
+
+    string_to_sign = (
+        f"AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n"
+        + hashlib.sha256(canonical_request.encode()).hexdigest()
+    )
+
+    def _sign(key_bytes: bytes, msg: str) -> bytes:
+        return hmac.new(key_bytes, msg.encode(), hashlib.sha256).digest()
+
+    signing_key = _sign(
+        _sign(
+            _sign(
+                _sign(f"AWS4{S3_SECRET_KEY}".encode(), date_stamp),
+                S3_REGION,
+            ),
+            "s3",
+        ),
+        "aws4_request",
+    )
+    signature = hmac.new(signing_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+
+    return f"{scheme}://{host}{uri}?{query_params}&X-Amz-Signature={signature}"
+
+
+async def download_file(key: str) -> bytes:
+    """Fetch a file's bytes from S3. Uses a presigned GET internally so we
+    don't have to re-sign the request path here."""
+    url = await get_file_url(key, expires_in=300)
+    client = _get_client()
+    resp = await client.get(url)
+    resp.raise_for_status()
+    return resp.content
+
+
+async def delete_file(key: str) -> None:
+    """Delete a file from S3."""
+    if not is_configured():
+        raise RuntimeError("S3 storage is not configured")
+
+    import hashlib
+    import hmac
+    from datetime import datetime
+
+    now = datetime.now(UTC)
+    date_stamp = now.strftime("%Y%m%d")
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+
+    host = S3_ENDPOINT.replace("https://", "").replace("http://", "").rstrip("/")
+    scheme = "https" if S3_ENDPOINT.startswith("https") else "http"
+    uri = _object_uri(key)
+
+    payload_hash = hashlib.sha256(b"").hexdigest()
+
+    headers_to_sign = {
+        "host": host,
+        "x-amz-content-sha256": payload_hash,
+        "x-amz-date": amz_date,
+    }
+    signed_headers = ";".join(sorted(headers_to_sign.keys()))
+    canonical_headers = "".join(f"{k}:{v}\n" for k, v in sorted(headers_to_sign.items()))
+
+    canonical_request = f"DELETE\n{uri}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+
+    credential_scope = f"{date_stamp}/{S3_REGION}/s3/aws4_request"
+    string_to_sign = (
+        f"AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n"
+        + hashlib.sha256(canonical_request.encode()).hexdigest()
+    )
+
+    def _sign(key_bytes: bytes, msg: str) -> bytes:
+        return hmac.new(key_bytes, msg.encode(), hashlib.sha256).digest()
+
+    signing_key = _sign(
+        _sign(
+            _sign(
+                _sign(f"AWS4{S3_SECRET_KEY}".encode(), date_stamp),
+                S3_REGION,
+            ),
+            "s3",
+        ),
+        "aws4_request",
+    )
+    signature = hmac.new(signing_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+
+    auth_header = (
+        f"AWS4-HMAC-SHA256 Credential={S3_ACCESS_KEY}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, Signature={signature}"
+    )
+
+    client = _get_client()
+    resp = await client.request(
+        "DELETE",
+        f"{scheme}://{host}{uri}",
+        headers={
+            "Authorization": auth_header,
+            "x-amz-content-sha256": payload_hash,
+            "x-amz-date": amz_date,
+        },
+    )
+    if resp.status_code not in (200, 204, 404):
+        resp.raise_for_status()
+
+
+async def close():
+    """Close the HTTP client."""
+    global _client
+    if _client and not _client.is_closed:
+        await _client.aclose()
+        _client = None

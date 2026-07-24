@@ -1,0 +1,296 @@
+"""Public landing-page demo router.
+
+Anonymous, IP rate-limited endpoints that let a visitor's coding agent
+read the canonical Stash skill + KB and publish a personalized HTML
+slide deck as a public-unlisted Stash. The visitor never signs in.
+
+Each handler is a thin shim that pins the singleton Demo scope
+and delegates straight into the same service functions used by the
+authenticated scope routers — no parallel implementation.
+"""
+
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, Field
+
+from ..config import settings
+from ..middleware import limiter
+from ..services import (
+    demo_content,
+    demo_service,
+    files_tree_service,
+    memory_service,
+    shared_skill_service,
+)
+from ..services.files_tree_service import DuplicatePageName
+
+router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
+
+# Rate limits — enough headroom for legitimate Q&A flows from a shared
+# office network but tight enough to make scripted abuse uncomfortable.
+_GET_LIMIT = "60/minute"
+_POST_LIMIT = "10/minute"
+
+
+# --- Request models ---
+
+
+class DemoPageCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=160)
+    html: str = Field(..., min_length=1)
+    html_layout: str = Field("fixed-aspect", pattern=r"^(responsive|fixed-aspect)$")
+
+
+# Constrained to the event types the Stash session viewer knows how to
+# render. Anything outside this set would just show up as a generic block
+# and confuse the visitor.
+_DEMO_EVENT_TYPE_RE = (
+    r"^(user_message|user_prompt|assistant_message|tool_use|tool_result|session_end)$"
+)
+
+
+class DemoSessionEvent(BaseModel):
+    event_type: str = Field(..., pattern=_DEMO_EVENT_TYPE_RE)
+    content: str = Field(..., max_length=100_000)
+    tool_name: str | None = Field(None, max_length=128)
+    metadata: dict | None = None
+    # Real captured sessions stream in over the conversation's actual
+    # duration. The agent should stamp each event with the time it
+    # happened; without this, every event lands at the moment of POST
+    # and the timeline collapses to a single instant — visibly fake.
+    created_at: datetime | None = None
+
+
+class DemoSessionCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    # Full turn-by-turn timeline of the coding-agent conversation from
+    # the user's first paste through to right before publish. The Stash
+    # session viewer renders these as a chat thread.
+    events: list[DemoSessionEvent] = Field(..., min_length=1, max_length=400)
+    agent_name: str = Field("demo-visitor", min_length=1, max_length=64)
+    # The agent's actual cwd at the time of the demo — real captured
+    # sessions always carry this. Optional because some agents don't
+    # have a meaningful cwd to surface.
+    cwd: str | None = Field(None, max_length=1024)
+
+
+class DemoSkillItem(BaseModel):
+    object_type: str = Field(..., pattern=r"^(page|session)$")
+    object_id: str = Field(..., min_length=1)
+
+
+class DemoSkillCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=160)
+    description: str = Field("", max_length=2000)
+    items: list[DemoSkillItem] = Field(..., min_length=1)
+
+
+# --- Static reads (skill / about / instructions) ---
+
+
+@router.get("/start", response_class=PlainTextResponse)
+@limiter.limit(_GET_LIMIT)
+async def start(request: Request) -> str:
+    """The agent's entry-point: full step-by-step instructions."""
+    return demo_content.START_INSTRUCTIONS_MARKDOWN
+
+
+@router.get("/skill", response_class=PlainTextResponse)
+@limiter.limit(_GET_LIMIT)
+async def skill(request: Request) -> str:
+    """Canonical HTML slide-deck skill — same bytes as Skills/slides/SKILL.md."""
+    return demo_content.SLIDES_SKILL_MARKDOWN
+
+
+@router.get("/about", response_class=PlainTextResponse)
+@limiter.limit(_GET_LIMIT)
+async def about(request: Request) -> str:
+    """About-Stash knowledge base used as source of truth for deck content."""
+    return demo_content.ABOUT_STASH_MARKDOWN
+
+
+# --- Writes (page / session / skill) ---
+
+
+@router.post("/pages", status_code=201)
+@limiter.limit(_POST_LIMIT)
+async def create_page(request: Request, req: DemoPageCreate = Body(...)) -> dict[str, Any]:
+    owner_user_id, owner_id = await demo_service.get_demo_scope()
+    name = _unique_page_name(req.title)
+    try:
+        page = await files_tree_service.create_page(
+            owner_user_id=owner_user_id,
+            name=name,
+            created_by=owner_id,
+            folder_id=None,
+            content="",
+            content_type="html",
+            content_html=req.html,
+            html_layout=req.html_layout,
+        )
+    except DuplicatePageName as e:
+        # Extremely unlikely given the random suffix, but surface cleanly.
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"page_id": page["id"], "name": page["name"]}
+
+
+@router.post("/sessions", status_code=201)
+@limiter.limit(_POST_LIMIT)
+async def create_session(request: Request, req: DemoSessionCreate = Body(...)) -> dict[str, Any]:
+    from ..database import get_pool
+    from ..services import session_service
+
+    owner_user_id, owner_id = await demo_service.get_demo_scope()
+    # Random session_id keeps demos isolated within the shared scope.
+    session_id = f"demo-{secrets.token_urlsafe(10)}"
+
+    # Upsert the session row first so cwd lands. push_events_batch will
+    # also call upsert (idempotent), but it doesn't know about cwd.
+    session = await session_service.upsert_session(
+        owner_user_id=owner_user_id,
+        session_id=session_id,
+        agent_name=req.agent_name,
+        cwd=req.cwd,
+        created_by=owner_id,
+    )
+
+    # Build the event payload. Per-event `created_at` is what gives the
+    # timeline a real shape — without it the chat thread collapses into
+    # one instant. When the agent doesn't supply timestamps we still
+    # need monotonically increasing ones so ORDER BY created_at
+    # preserves the conversation order, so stagger each by a
+    # microsecond off `now()`.
+    fallback_base = datetime.now(UTC)
+    payload = []
+    for idx, event in enumerate(req.events):
+        meta = dict(event.metadata or {})
+        if idx == 0:
+            meta.setdefault("demo_title", req.title)
+        ts = event.created_at or (fallback_base + timedelta(microseconds=idx))
+        payload.append(
+            {
+                "agent_name": req.agent_name,
+                "event_type": event.event_type,
+                "content": event.content,
+                "session_id": session_id,
+                "tool_name": event.tool_name,
+                "metadata": meta,
+                "created_at": ts,
+            }
+        )
+
+    inserted = await memory_service.push_events_batch(
+        owner_user_id=owner_user_id,
+        created_by=owner_id,
+        events=payload,
+    )
+
+    # If the agent included a closing `session_end` event, stamp the
+    # session's finished_at to that event's time. Real captured sessions
+    # set finished_at when the agent's harness emits its end-of-session
+    # hook; the demo equivalent is the agent saying "I'm done."
+    last = req.events[-1]
+    if last.event_type == "session_end" and last.created_at is not None:
+        pool = get_pool()
+        await pool.execute(
+            "UPDATE sessions SET finished_at = $1 WHERE id = $2",
+            last.created_at,
+            session["id"],
+        )
+
+    return {
+        "session_id": session["id"],
+        "session_external_id": session_id,
+        "event_count": len(inserted),
+    }
+
+
+@router.post("/skills", status_code=201)
+@limiter.limit(_POST_LIMIT)
+async def create_skill(request: Request, req: DemoSkillCreate = Body(...)) -> dict[str, Any]:
+    """Wrap demo-created pages/sessions into a skill folder and publish it."""
+    from ..database import get_pool
+
+    owner_user_id, owner_id = await demo_service.get_demo_scope()
+    pool = get_pool()
+
+    folder = await files_tree_service.create_folder(
+        owner_user_id, _unique_page_name(req.title), owner_id
+    )
+
+    for item in req.items:
+        if item.object_type == "page":
+            moved = await pool.execute(
+                "UPDATE pages SET folder_id = $1 WHERE id = $2::uuid AND owner_user_id = $3",
+                folder["id"],
+                item.object_id,
+                owner_user_id,
+            )
+            if moved != "UPDATE 1":
+                raise HTTPException(status_code=400, detail="Skill items must be in the demo scope")
+        else:
+            session_external_id = await pool.fetchval(
+                "SELECT session_id FROM sessions WHERE id = $1::uuid AND owner_user_id = $2 "
+                "AND deleted_at IS NULL",
+                item.object_id,
+                owner_user_id,
+            )
+            if not session_external_id:
+                raise HTTPException(status_code=400, detail="Skill items must be in the demo scope")
+            await shared_skill_service.materialize_session_page(
+                owner_user_id, session_external_id, folder["id"], owner_id
+            )
+
+    # Copy the canonical KB pages in so every demo skill ships with the
+    # slides skill + about-Stash docs the agent used to build it.
+    kb_folder_id = await demo_service.get_kb_folder_id()
+    kb_pages = await pool.fetch(
+        "SELECT name, content_markdown, content_type FROM pages "
+        "WHERE folder_id = $1 AND deleted_at IS NULL",
+        kb_folder_id,
+    )
+    for kb_page in kb_pages:
+        await files_tree_service.create_page(
+            owner_user_id,
+            kb_page["name"],
+            owner_id,
+            folder_id=folder["id"],
+            content=kb_page["content_markdown"] or "",
+            content_type=kb_page["content_type"] or "markdown",
+        )
+
+    try:
+        skill = await shared_skill_service.publish_folder(
+            owner_user_id,
+            owner_id,
+            folder["id"],
+            title=req.title,
+            description=req.description,
+        )
+    except (ValueError, PermissionError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    base = settings.PUBLIC_URL.rstrip("/")
+    return {
+        "skill_id": skill["id"],
+        "slug": skill["slug"],
+        "app_url": f"{base}/skills/{skill['slug']}",
+    }
+
+
+# --- Helpers ---
+
+
+def _unique_page_name(title: str) -> str:
+    """Append a short random suffix so concurrent demos don't collide.
+
+    Page names are unique per (scope, folder) — without the suffix
+    two visitors named "Sam" would race on the same name.
+    """
+    suffix = secrets.token_urlsafe(4)[:6].lower()
+    base = title.strip()[:200]
+    return f"{base} — {suffix}"

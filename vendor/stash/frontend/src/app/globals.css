@@ -1,0 +1,914 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+/* shadcn/ui components emit `dark:` utilities. moltchat toggles dark mode with a
+   `[data-theme="dark"]` attribute (not next-themes' `.dark` class), so point the
+   dark variant at that attribute — single source of truth for dark mode. */
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+/* === Design System Tokens (DESIGN.md) === */
+
+:root {
+  /* Notion-tan palette (matches skill-share-mockup) */
+  --bg-base: #FFFFFF;
+  --bg-surface: #F6F5F2;
+  --bg-raised: #ECEAE4;
+  --border-color: #E9E7E1;
+  --border-subtle-color: #F0EEE9;
+  --text-primary: #322F29;
+  --text-dim: #5A574F;
+  --text-muted: #97948D;
+  --divider-color: #DDDBD4;
+
+  /* shadcn/ui semantic vars, sourced from the moltchat tokens above so the two
+     systems share one palette. Brand stays orange (no indigo). `--muted` follows
+     shadcn semantics: a subtle SURFACE (not gray text); gray text is
+     `--muted-foreground`. See the muted migration note in @theme inline. */
+  --radius: 0.625rem;
+  --primary: var(--color-brand-500);
+  --primary-foreground: #ffffff;
+  --card: var(--bg-base);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-base);
+  --popover-foreground: var(--text-primary);
+  --secondary: var(--bg-raised);
+  --secondary-foreground: var(--text-primary);
+  --accent: var(--bg-raised);
+  --accent-foreground: var(--text-primary);
+  --muted: var(--bg-raised);
+  --muted-foreground: var(--text-muted);
+  --input: var(--border-color);
+  --ring: var(--color-brand-400);
+  --destructive: var(--color-error);
+  --destructive-foreground: #ffffff;
+  /* Layering: rail (deepest) → explorer/sidebar (mid) → content (white). */
+  --rail: #E5E1D8;
+  --sidebar: #ECE9E2;
+  --sidebar-foreground: var(--text-dim);
+  --sidebar-primary: var(--color-brand-500);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--bg-raised);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-color);
+  --sidebar-ring: var(--color-brand-400);
+}
+
+[data-theme="dark"] {
+  --bg-base: #1E293B;
+  --bg-surface: #273548;
+  --bg-raised: #334155;
+  --border-color: #3E4E63;
+  --border-subtle-color: #2D3D50;
+  --text-primary: #F1F5F9;
+  --text-dim: #94A3B8;
+  --text-muted: #64748B;
+  --divider-color: #4C5C73;
+  /* Chrome layering in dark mode: rail (deepest) → sidebar → content. */
+  --rail: #141C2A;
+  --sidebar: #1B2536;
+}
+
+@theme inline {
+  /* Semantic background colors */
+  --color-background: var(--bg-base);
+  --color-base: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+
+  /* Semantic text colors */
+  --color-dim: var(--text-dim);
+  /* `--color-muted` follows shadcn semantics now: a subtle SURFACE (`bg-muted`),
+     not gray text. Gray text moved to `--color-muted-foreground` — the
+     `text-muted` → `text-muted-foreground` rename across the app is the migration
+     that makes this one variable have one meaning. */
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  /* Semantic border colors */
+  --color-border: var(--border-color);
+  --color-border-subtle: var(--border-subtle-color);
+
+  /* shadcn/ui semantic color + radius scale, so `bg-card`, `bg-popover`,
+     `bg-primary`, `bg-secondary`, `bg-accent`, `ring`, `bg-sidebar*`, and
+     `rounded-*` resolve. All source from the vars defined in :root above. */
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-rail: var(--rail);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--color-brand-500);
+  --color-chart-2: var(--color-human);
+  --color-chart-3: var(--color-success);
+  --color-chart-4: var(--color-brand-400);
+  --color-chart-5: var(--color-warning);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Brand (orange — DESIGN.md: #F97316 primary) */
+  --color-brand-50: #FFF7ED;
+  --color-brand-100: #FFEDD5;
+  --color-brand-200: #FED7AA;
+  --color-brand-300: #FDBA74;
+  --color-brand-400: #FB923C;
+  --color-brand-500: #F97316;
+  --color-brand-600: #EA580C;
+  --color-brand-700: #C2410C;
+  --color-brand-800: #9A3412;
+  --color-brand-900: #7C2D12;
+  --color-brand: #F97316;
+  --color-brand-hover: #EA580C;
+  --color-brand-muted: #FFF7ED;
+  --color-brand-deep: #C2410C;
+
+  /* Agent/session accent */
+  --color-agent: #EA580C;
+  --color-agent-muted: rgba(249, 115, 22, 0.12);
+
+  /* Human (blue) */
+  --color-human: #3B82F6;
+  --color-human-muted: oklch(0.6 0.16 255 / 0.15);
+
+  /* Semantic */
+  --color-success: #22C55E;
+  --color-success-muted: oklch(0.7 0.15 145 / 0.12);
+  --color-warning: #EAB308;
+  --color-warning-muted: oklch(0.8 0.15 90 / 0.12);
+  --color-error: #EF4444;
+  --color-error-muted: oklch(0.6 0.2 25 / 0.12);
+
+  /* Typography */
+  --font-sans: var(--font-instrument-sans), 'Instrument Sans', sans-serif;
+  --font-display: var(--font-space-grotesk), 'Space Grotesk', 'Satoshi', sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans), sans-serif;
+  transition: background 0.2s ease, color 0.2s ease;
+  font-size: 14px;
+}
+
+/* Tailwind v4 preflight sets `cursor: default` on buttons; we want web-app
+   pointer affordance on everything clickable. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Notion-style sidebar primitives */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #d8d8d4;
+  border-radius: 3px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+/* Chevron rotation is owned by <ChevronToggle> (Tailwind `rotate-90`).
+   Only the transition lives here so rotates animate consistently. */
+.chev {
+  transition: rotate 0.12s ease, transform 0.12s ease;
+}
+
+.page-row .page-handle {
+  opacity: 0;
+}
+.page-row:hover .page-handle {
+  opacity: 1;
+}
+
+.hl-yellow {
+  background: #fef9c3;
+  border-bottom: 2px solid #facc15;
+}
+
+/* Narrative stat cards (3-up grid) */
+.markdown-content .stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 1.25rem 0 1.5rem;
+  text-align: center;
+}
+.markdown-content .stat-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--bg-base);
+}
+.markdown-content .stat-num {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.markdown-content .stat-num.stat-pos {
+  color: #047857;
+}
+.markdown-content .stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* Brand-bordered quote callout used in narratives */
+.markdown-content .quote-callout {
+  border-left: 4px solid var(--color-brand-500, #F97316);
+  background: var(--color-brand-50, #FFF7ED);
+  border-radius: 4px;
+  padding: 0.85rem 1rem;
+  margin: 1rem 0 1.25rem;
+}
+.markdown-content .quote-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-brand-700, #C2410C);
+}
+.markdown-content .quote-body {
+  font-style: italic;
+  font-size: 14px;
+  margin-top: 0.25rem;
+}
+.markdown-content .quote-cite {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* === TipTap Editor === */
+
+.tiptap {
+  min-height: 100%;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: var(--text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Page body — readable but compact. 1.55 reads tighter than docs-style
+   prose (~1.7) while staying comfortable for paragraphs of text. */
+.file-page-body {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* Comment anchors — wraps the range that a comment thread is attached to.
+   Renders in both the Tiptap markdown editor and the read-only renderer. */
+.ProseMirror .comment-anchor,
+.ProseMirror [data-comment-id],
+.comment-anchor,
+[data-comment-id] {
+  background: rgba(254, 240, 138, 0.45);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+/* Floating "Comment" pill anchored above the user's HTML-page selection.
+   The ::after triangle visually ties the pill to the highlighted text. */
+.comment-anchor-pill {
+  animation: comment-anchor-pill-in 120ms ease-out;
+}
+.comment-anchor-pill::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--text-primary);
+}
+@keyframes comment-anchor-pill-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 4px)); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+
+.ProseMirror .comment-anchor.is-active,
+.ProseMirror [data-comment-id].is-active,
+.comment-anchor.is-active,
+[data-comment-id].is-active {
+  background: rgba(250, 204, 21, 0.7);
+  outline: 1px solid #ca8a04;
+}
+
+.description-editor-content {
+  min-height: 1.7em;
+}
+
+.ProseMirror.description-editor-content p {
+  margin: 0.25em 0;
+}
+
+.ProseMirror.description-editor-content p:first-child,
+.ProseMirror.description-editor-content h1:first-child,
+.ProseMirror.description-editor-content h2:first-child,
+.ProseMirror.description-editor-content h3:first-child {
+  margin-top: 0;
+}
+
+.ProseMirror.description-editor-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Page editor rhythm. The editor is `prose prose-sm`, whose default ~1.14em
+   paragraph margins read as double-spacing while typing. Tighten the vertical
+   margins to match the read-only `.markdown-content` renderer so editing looks
+   like the rendered result. (.ProseMirror.file-page-body out-specifies the
+   prose-sm `:where(p)` rules.) */
+.ProseMirror.file-page-body p {
+  margin: 0.3em 0;
+}
+.ProseMirror.file-page-body ul,
+.ProseMirror.file-page-body ol {
+  margin: 0.35em 0;
+}
+.ProseMirror.file-page-body li {
+  margin: 0.15em 0;
+}
+.ProseMirror.file-page-body blockquote {
+  margin: 0.5em 0;
+}
+.ProseMirror.file-page-body > :first-child {
+  margin-top: 0;
+}
+.ProseMirror.file-page-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------
+ * Markdown typography — `@tailwindcss/typography` (the `prose` class)
+ * is our base. Add `prose` to any container that holds rendered
+ * markdown (the Tiptap .ProseMirror node, the react-markdown
+ * <article>, etc.). The override below pins prose's CSS-variable
+ * palette to our brand tokens so links are orange, body text uses
+ * --text-dim, code chips use a faint orange, and quotes accent with
+ * the brand border. Sized as `prose-sm` by default at the call site.
+ * --------------------------------------------------------------- */
+.prose {
+  --tw-prose-body: var(--text-dim);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-dim);
+  --tw-prose-links: #F97316;
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-muted);
+  --tw-prose-bullets: var(--text-muted);
+  --tw-prose-hr: var(--border-color);
+  --tw-prose-quotes: var(--text-dim);
+  --tw-prose-quote-borders: #fb923c;
+  --tw-prose-captions: var(--text-muted);
+  --tw-prose-code: #c2410c;
+  --tw-prose-pre-code: var(--text-dim);
+  --tw-prose-pre-bg: var(--bg-raised);
+  --tw-prose-th-borders: var(--border-subtle-color);
+  --tw-prose-td-borders: var(--border-subtle-color);
+
+  /* Headings use the display family + tighter tracking. */
+  font-family: inherit;
+  color: var(--tw-prose-body);
+  max-width: none;
+}
+.prose :where(h1, h2, h3, h4):not(:where([class~="not-prose"] *)) {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: -0.015em;
+}
+
+/* Inline code: orange chip with a thin tinted border to match the
+   rest of the brand-accent treatment. */
+.prose :where(code):not(:where([class~="not-prose"] *, pre *)) {
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-weight: inherit;
+}
+.prose :where(code):not(:where([class~="not-prose"] *, pre *))::before,
+.prose :where(code):not(:where([class~="not-prose"] *, pre *))::after {
+  content: "";
+}
+
+/* Block quote: soft brand-tinted bg + rounded right edge. */
+.prose :where(blockquote):not(:where([class~="not-prose"] *)) {
+  background: rgba(249, 115, 22, 0.05);
+  border-radius: 0 6px 6px 0;
+  padding: 0.4em 1em;
+  font-style: italic;
+}
+
+/* Horizontal rule: Obsidian-style 2px line. --border-color is too
+   faint against the page background and --text-muted too heavy, so
+   dividers get their own token. */
+.prose :where(hr):not(:where([class~="not-prose"] *)) {
+  border: none;
+  height: 2px;
+  background: var(--divider-color);
+}
+
+/* Tables — match the rounded-outer, light-inner-border look. */
+.prose :where(table):not(:where([class~="not-prose"] *)) {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border-subtle-color, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  overflow: hidden;
+}
+.prose :where(thead th):not(:where([class~="not-prose"] *)) {
+  background: var(--bg-muted, #fafafa);
+  color: var(--text-primary);
+}
+.prose :where(table td):not(:where([class~="not-prose"] *)),
+.prose :where(table th):not(:where([class~="not-prose"] *)) {
+  border-right: 1px solid var(--border-subtle-color);
+  border-bottom: 1px solid var(--border-subtle-color);
+}
+.prose :where(table tr:last-child td):not(:where([class~="not-prose"] *)) {
+  border-bottom: none;
+}
+.prose :where(table td:last-child, table th:last-child):not(
+    :where([class~="not-prose"] *)
+  ) {
+  border-right: none;
+}
+
+/* Collaboration cursor styles */
+.collaboration-cursor__caret {
+  border-left: 1px solid #0d0d0d;
+  border-right: 1px solid #0d0d0d;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+
+.collaboration-cursor__label {
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  left: -1px;
+  line-height: normal;
+  padding: 0.1rem 0.3rem;
+  position: absolute;
+  top: -1.4em;
+  user-select: none;
+  white-space: nowrap;
+  font-family: var(--font-mono), monospace;
+}
+
+.collaboration-selection {
+  border-radius: 2px;
+}
+
+/* Task list checkbox styles */
+.tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.tiptap ul[data-type="taskList"] li label {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+.tiptap ul[data-type="taskList"] li label input[type="checkbox"] {
+  accent-color: #F97316;
+}
+
+.tiptap ul[data-type="taskList"] li div {
+  flex: 1;
+}
+
+/* === Markdown Message Styles === */
+
+.markdown-content {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content p {
+  margin: 0.25em 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+  line-height: 1.3;
+}
+
+.markdown-content h1 { font-size: 1.5em; }
+.markdown-content h2 { font-size: 1.3em; }
+.markdown-content h3 { font-size: 1.15em; }
+
+.markdown-content strong {
+  font-weight: 700;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content a {
+  color: #F97316;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-content a:hover {
+  color: #EA580C;
+}
+
+.markdown-content code {
+  background: var(--bg-raised);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.875em;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  color: #F97316;
+}
+
+.markdown-content pre {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle-color);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  margin: 0.5em 0;
+  overflow-x: auto;
+}
+
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.5em;
+  margin: 0.35em 0;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+}
+
+.markdown-content li {
+  margin: 0.15em 0;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin: 0;
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid var(--border-color);
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: var(--text-muted);
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 0.75em 0;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  width: 100%;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--border-color);
+  padding: 0.35em 0.65em;
+  text-align: left;
+}
+
+.markdown-content th {
+  background: var(--bg-raised);
+  font-weight: 600;
+}
+
+.markdown-content del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: #F97316;
+}
+
+/* Multi-cell selection — Tiptap/prosemirror-tables sets `.selectedCell`
+   on each cell in a drag-selected range. We render the highlight via a
+   pseudo-element so the cell's own text/styles stay untouched. */
+.ProseMirror table td,
+.ProseMirror table th {
+  position: relative;
+}
+.ProseMirror table td.selectedCell::after,
+.ProseMirror table th.selectedCell::after {
+  background: rgba(249, 115, 22, 0.18);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+/* Column resize handle (Table.configure({ resizable: true })). */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 1em 0;
+}
+.ProseMirror .column-resize-handle {
+  background-color: var(--color-brand-400, #fb923c);
+  bottom: -2px;
+  pointer-events: none;
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 4px;
+  z-index: 20;
+}
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* =============================================================
+ * Links — one visual language for markdown links.
+ *
+ * Classification is purely by href pattern. CSS doesn't need to
+ * know about edit vs view mode; both render the same.
+ *
+ *   internal  = skill route (absolute or relative)
+ *   external  = any other scheme, off-origin URL (↗ trailing)
+ *   dead      = relative ref that doesn't match a skill route
+ *               (import artifacts like "README.md")
+ * ============================================================= */
+
+/* Base link style — regular markdown links, orange (brand) */
+.ProseMirror a {
+  color: var(--link, #F97316);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+.ProseMirror a:hover {
+  color: var(--link-hover, #EA580C);
+}
+
+/* External URLs — anything with a scheme that isn't skill itself.
+   The :not() chain keeps skill absolute URLs styled as internal. */
+.ProseMirror a[href^="http://"]:not([href*="://joinstash.ai/"]):not([href*="://app.joinstash.ai/"])::after,
+.ProseMirror a[href^="https://"]:not([href*="://joinstash.ai/"]):not([href*="://app.joinstash.ai/"])::after {
+  content: "\a0↗";
+  font-size: 0.8em;
+  opacity: 0.7;
+  margin-left: 0.1em;
+}
+
+/* Dead refs — hrefs that are neither a scheme nor an absolute path.
+   This catches the import-artifact relative paths like "README.md" or
+   "../../raw/arxiv_papers/X.pdf" that can't possibly navigate. */
+.ProseMirror a:not([href^="/"]):not([href*="://"]):not([href^="mailto:"]):not([href^="tel:"]) {
+  color: var(--text-muted, #8a8a87);
+  text-decoration: underline dotted var(--danger, #ef4444);
+  text-decoration-skip-ink: none;
+  cursor: default;
+}
+.ProseMirror a:not([href^="/"]):not([href*="://"]):not([href^="mailto:"]):not([href^="tel:"]):hover {
+  color: var(--text-muted, #8a8a87);
+}
+
+/* =============================================================
+ * Design utility classes — shared by the Claude Design mockups
+ * (see /design/index.html) and the ported real product pages.
+ * Class names match the mock 1:1 so JSX can be pasted in.
+ * ============================================================= */
+
+/* Mono SYS label */
+.sys-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Type tags */
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tag-agent { background: #FFEDD5; color: #C2410C; }
+.tag-human { background: #DBEAFE; color: #1D4ED8; }
+.tag-brand { background: #FFEDD5; color: #C2410C; }
+.tag-success { background: rgba(34,197,94,0.12); color: #15803D; }
+.tag-warning { background: rgba(234,179,8,0.18); color: #854D0E; }
+.tag-muted { background: var(--bg-raised); color: var(--text-dim); }
+
+/* Card variants */
+.card {
+  background: var(--bg-base);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.card-soft {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle-color);
+  border-radius: 10px;
+}
+
+/* Clickable card row */
+.linkrow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-base);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.linkrow:hover { border-color: #FED7AA; background: #FFF7ED; }
+
+/* Avatar dots */
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.av-rose { background: #FECDD3; color: #9F1239; }
+.av-orange { background: #FED7AA; color: #9A3412; }
+.av-emerald { background: #A7F3D0; color: #065F46; }
+.av-amber { background: #FDE68A; color: #78350F; }
+.av-sky { background: #BAE6FD; color: #075985; }
+.av-teal { background: #99F6E4; color: #115E59; }
+.av-lime { background: #D9F99D; color: #3F6212; }
+
+/* Discover/skill cover gradients */
+.cover-1 { background: linear-gradient(135deg, #FED7AA, #FCA5A5); }
+.cover-2 { background: linear-gradient(135deg, #BFDBFE, #A7F3D0); }
+.cover-3 { background: linear-gradient(135deg, #A7F3D0, #BAE6FD); }
+.cover-4 { background: linear-gradient(135deg, #FDE68A, #FECACA); }
+.cover-5 { background: linear-gradient(135deg, #BAE6FD, #FED7AA); }
+.cover-6 { background: linear-gradient(135deg, #FECDD3, #FEF3C7); }
+
+/* Diagonal-stripe image placeholder */
+.stripe-placeholder {
+  background-image: repeating-linear-gradient(135deg, #F1F1EE 0 8px, #FAFAF8 8px 16px);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Notion-style typed spreadsheet */
+.tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.tbl th, .tbl td {
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: middle;
+  background: var(--bg-base);
+}
+.tbl th {
+  background: var(--bg-surface);
+  font-weight: 500;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-family: var(--font-mono), monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.tbl tr:hover td { background: #FFF7ED; }
+.tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono), monospace; }
+.tbl .row-num {
+  width: 36px;
+  text-align: center;
+  color: var(--text-muted);
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  background: var(--bg-surface);
+}
+
+/* In-page prose container — separate from .markdown-content which is
+   tighter (chat-message density). .proseish gives a doc-page feel. */
+.proseish {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+.proseish h1, .proseish h2, .proseish h3 {
+  font-family: var(--font-display), sans-serif;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.proseish h1 { font-size: 30px; font-weight: 700; margin: 28px 0 8px; }
+.proseish h2 { font-size: 22px; font-weight: 600; margin: 24px 0 6px; }
+.proseish h3 { font-size: 17px; font-weight: 600; margin: 18px 0 4px; }
+.proseish p { margin: 8px 0; }
+.proseish ul { padding-left: 22px; margin: 6px 0; }
+.proseish li { margin: 3px 0; }
+.proseish code { font-family: var(--font-mono), monospace; color: #C2410C; background: var(--bg-raised); padding: 1px 5px; border-radius: 4px; font-size: 0.88em; }
+.proseish a { color: #F97316; text-decoration: underline; text-underline-offset: 2px; }
+.proseish blockquote { border-left: 3px solid var(--border-color); padding-left: 12px; color: var(--text-muted); margin: 10px 0; }

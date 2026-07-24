@@ -1,0 +1,172 @@
+# Contributing to Stash
+
+Thank you for taking the time to contribute. This guide covers how to set up a
+development environment, run the test suite, and submit a pull request.
+
+---
+
+## Prerequisites
+
+| Tool | Minimum version |
+|------|----------------|
+| Python | 3.12 |
+| Node.js | 20 |
+| Docker + Docker Compose | 24 |
+| PostgreSQL (pgvector) | 16 (via Docker) |
+
+---
+
+## Local development setup
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Fergana-Labs/stash.git
+cd stash
+
+# 2. Start Postgres (pgvector) on the default port
+docker run -d --name stash-pg -p 5432:5432 \
+  -e POSTGRES_USER=stash -e POSTGRES_PASSWORD=stash -e POSTGRES_DB=stash \
+  pgvector/pgvector:pg16
+# (./start.sh manages its own per-worktree database automatically; this
+# standalone container is only needed for running the backend or tests by hand.)
+
+# 3. Backend dependencies (includes test tooling)
+pip install -r backend/requirements-dev.txt
+
+# 4. Copy and edit environment variables
+cp .env.example .env
+# — Embeddings default to local sentence-transformers (no key needed).
+#   To use a hosted provider: set OPENAI_API_KEY or HF_TOKEN (see .env.example)
+
+# 5. Run Alembic migrations
+python -m alembic upgrade head
+
+# 6. Frontend dependencies
+cd frontend && npm ci && cd ..
+
+# 7. Start everything
+./start.sh
+#   Backend  → http://localhost:3456
+#   Frontend → http://localhost:3457
+```
+
+### Connecting integrations locally (OAuth)
+
+Integrations show "…OAuth is not configured for this server. Missing: <vars>"
+until every listed env var is set in the repo-root `.env`. Each OAuth provider
+needs **three** vars: `<PROVIDER>_OAUTH_CLIENT_ID`, `<PROVIDER>_OAUTH_CLIENT_SECRET`,
+and `<PROVIDER>_OAUTH_REDIRECT_URI` (X/Twitter uses the `TWITTER_` prefix;
+Granola needs only its redirect URI). There are deliberately no defaults for
+redirect URIs — set them explicitly:
+
+```bash
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3456/api/v1/integrations/google/callback
+# ...same pattern for gmail, github, notion, slack, jira, linear, asana,
+# granola, and x (TWITTER_OAUTH_REDIRECT_URI → .../integrations/x/callback)
+```
+
+Client IDs/secrets come from each provider's developer console (or ask a
+teammate for the shared dev OAuth apps). The provider's OAuth app must have
+the `http://localhost:3456/...` callback registered as a redirect URI, or the
+consent screen will reject the flow with a redirect_uri mismatch. Ports are
+fixed (backend 3456) precisely so these registrations stay valid.
+
+---
+
+## CLI development
+
+ To develop on it the cli, you need to run
+ ```
+pipx install . --force
+```
+
+Then iterate:
+
+1. Edit code under `cli/` or `stashai/`.
+2. Re-run `pipx install . --force`.
+3. Run `stash <args>` and verify your changes worked.
+
+---
+
+## Running tests
+
+The backend, CLI, and frontend suites must pass before a PR can be merged.
+
+### Backend
+
+```bash
+# Start the standalone Postgres container from Getting started (a separate
+# test database is created inside the same instance)
+docker start stash-pg 2>/dev/null || docker run -d --name stash-pg -p 5432:5432 \
+  -e POSTGRES_USER=stash -e POSTGRES_PASSWORD=stash -e POSTGRES_DB=stash \
+  pgvector/pgvector:pg16
+
+# Create the test database if it doesn't exist
+psql postgresql://stash:stash@localhost:5432/postgres -c "CREATE DATABASE stash_test"
+
+# Run migrations against the test DB
+# Note: Alembic reads DATABASE_URL, not TEST_DATABASE_URL
+DATABASE_URL=postgresql://stash:stash@localhost:5432/stash_test \
+  python -m alembic upgrade head
+
+# Run pytest (set both vars so config.py and conftest.py agree)
+DATABASE_URL=postgresql://stash:stash@localhost:5432/stash_test \
+TEST_DATABASE_URL=postgresql://stash:stash@localhost:5432/stash_test \
+  python -m pytest backend/tests/ -v
+```
+
+### CLI
+
+Install the package from the working tree before running the CLI tests:
+
+```bash
+pip install -e .
+python -m pytest cli/tests --no-cov
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm test
+```
+
+---
+
+## Making changes
+
+- Keep PRs focused. One logical change per pull request is strongly preferred.
+- Add or update tests for any behaviour you change.
+- Run all test suites locally before pushing.
+- Follow the naming conventions in `ARCHITECTURE.md`: use **Stash** everywhere.
+
+### Adding a schema change
+
+1. Create a new Alembic migration:
+   ```bash
+   python -m alembic revision -m "add_my_column"
+   ```
+2. Edit the generated file in `backend/migrations/versions/` — write both
+   `upgrade()` and `downgrade()` using raw SQL via `op.execute()`.
+3. Run `python -m alembic upgrade head` to verify.
+4. Add a corresponding test in `backend/tests/test_migrations.py` if the
+   migration has non-trivial data logic.
+
+---
+
+## Submitting a pull request
+
+1. Fork the repository and create a feature branch off `main`.
+2. Ensure all test suites pass locally.
+3. Open a PR against `main`. The CI pipeline runs all suites automatically.
+4. Describe the motivation for the change in the PR body. Link any related issues.
+5. A maintainer will review and merge once CI is green.
+
+---
+
+## Code style
+
+- **Python:** PEP 8, type annotations on all public functions. No `mypy` enforcement yet, but annotations help reviewers.
+- **TypeScript/React:** ESLint with `eslint-config-next`. Run `npm run lint` before pushing.
+- **SQL:** All queries must use parameterised placeholders (`$1`, `$2`, ...). No string interpolation in SQL.
+- **Comments:** Explain *why*, not *what*. Avoid narrating code with comments like `# increment counter`.

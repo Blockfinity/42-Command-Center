@@ -1,0 +1,20 @@
+{
+  "name": "stash-chat-sync",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Chrome extension that clips webpages/PDFs and syncs ChatGPT and Claude.ai conversations into Stash",
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "watch": "node esbuild.config.js --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && rm -f stash-chat-sync.zip && zip -r stash-chat-sync.zip manifest.json popup.html dist icons"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.270",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0"
+  }
+}

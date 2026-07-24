@@ -1,0 +1,112 @@
+"""Provision / rotate users from Auth0 identities."""
+
+import logging
+import re
+
+from backend.database import get_pool
+from backend.services import share_service, user_scope_service
+from backend.services.email_service import send_welcome_email
+
+logger = logging.getLogger(__name__)
+
+_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
+_NEW_USER_WINDOW_SQL = "2 minutes"
+
+
+def _slugify_name(raw: str) -> str:
+    slug = _NAME_CHARS.sub("", raw)[:60] or "user"
+    return slug
+
+
+async def _unique_name(base: str) -> str:
+    pool = get_pool()
+    candidate = base
+    suffix = 2
+    while await pool.fetchval("SELECT 1 FROM users WHERE name = $1", candidate):
+        candidate = f"{base}_{suffix}"[:64]
+        suffix += 1
+    return candidate
+
+
+async def get_or_create_user_row_from_auth0(
+    auth0_sub: str,
+    email: str | None,
+    name: str | None,
+    email_verified: bool = False,
+):
+    """Return (user_row, created) for an Auth0 identity.
+
+    `created` is True when this exchange inserted the user, or when the user
+    was inserted moments ago and the signup callback exchanged twice. The
+    frontend uses it to route first-time sign-ins into onboarding.
+    """
+    pool = get_pool()
+
+    # A Google login is Google itself vouching that the user controls this
+    # address, so trust the connection. The /userinfo email_verified claim is
+    # dropped on returning sessions, which would otherwise leave returning
+    # Google users permanently unverified.
+    if auth0_sub.startswith("google-oauth2|"):
+        email_verified = True
+
+    row = await pool.fetchrow(
+        "SELECT id, name, display_name, description, created_at, last_seen, "
+        f"created_at >= now() - interval '{_NEW_USER_WINDOW_SQL}' AS is_new_user "
+        "FROM users WHERE auth0_sub = $1",
+        auth0_sub,
+    )
+    if row:
+        if email:
+            # email_verified is the trust anchor for derived workspace
+            # membership — persisting it here IS the enrollment.
+            await pool.execute(
+                "UPDATE users SET last_seen = now(), email = $2, email_verified = $3 WHERE id = $1",
+                row["id"],
+                email,
+                email_verified,
+            )
+            # An invite may have been addressed to this email after the account
+            # existed (e.g. before its email was recorded) — convert on login.
+            await share_service.convert_pending_invites(row["id"], email)
+        elif email_verified:
+            # Returning login with no email in the sparse /userinfo payload but
+            # a positive verification signal (Google) — persist it, never
+            # downgrade an already-verified account.
+            await pool.execute(
+                "UPDATE users SET last_seen = now(), email_verified = true WHERE id = $1",
+                row["id"],
+            )
+        else:
+            await pool.execute("UPDATE users SET last_seen = now() WHERE id = $1", row["id"])
+        user = dict(row)
+        is_new_user = bool(user.pop("is_new_user"))
+        return user, is_new_user
+
+    base = _slugify_name((email or "").split("@")[0] or name or "user")
+    username = await _unique_name(base)
+    display_name = name or username
+
+    row = await pool.fetchrow(
+        "INSERT INTO users (name, display_name, auth0_sub, description, email, email_verified) "
+        "VALUES ($1, $2, $3, '', $4, $5) "
+        "RETURNING id, name, display_name, description, created_at, last_seen",
+        username,
+        display_name,
+        auth0_sub,
+        email,
+        email_verified,
+    )
+    user = dict(row)
+
+    await user_scope_service.seed_user_scope(user["id"])
+
+    await share_service.convert_pending_invites(user["id"], email)
+
+    if email:
+        try:
+            first_name = (name or "").split()[0] if name else None
+            send_welcome_email(email, first_name=first_name)
+        except Exception as exc:
+            logger.warning("welcome email failed exception_type=%s", type(exc).__name__)
+
+    return user, True

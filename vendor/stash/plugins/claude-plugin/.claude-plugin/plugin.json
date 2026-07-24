@@ -1,0 +1,30 @@
+{
+  "name": "stash",
+  "version": "0.1.379",
+  "description": "Connect Claude Code to Stash \u2014 stream activity to your Stash and collaborate with your other agents.",
+  "author": {
+    "name": "Fergana Labs"
+  },
+  "homepage": "https://github.com/Fergana-Labs/stash",
+  "userConfig": {
+    "api_endpoint": {
+      "title": "API Endpoint",
+      "description": "Stash API base URL",
+      "type": "string",
+      "default": "https://joinstash.ai",
+      "sensitive": false
+    },
+    "api_key": {
+      "title": "API Key",
+      "description": "API key (from Stash registration)",
+      "type": "string",
+      "sensitive": true
+    },
+    "agent_name": {
+      "title": "Agent Name",
+      "description": "Agent identity name in Stash",
+      "type": "string",
+      "sensitive": false
+    }
+  }
+}

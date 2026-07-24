@@ -1,0 +1,5 @@
+{
+  "base_url": "http://localhost:8001",
+  "session_folder_id": "",
+  "_comment": "Stash manifest for the 42-Command-Center repo. Points at the LOCAL stash backend only. DO NOT change base_url to api.joinstash.ai — see vendor/stash/PRIVACY_PATCH.md. session_folder_id left empty so this repo's agent sessions land in the user's Default folder; set to a specific UUID if you want them grouped."
+}

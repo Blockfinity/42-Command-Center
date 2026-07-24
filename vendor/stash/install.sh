@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# joinstash.ai/install — install the stashai CLI and run the interactive
+# `stash signin` setup wizard (managed-vs-self-host, browser auth,
+# upload-vs-read, agent hooks, repo connection).
+#
+# Recommended invocation (keeps stdin attached to your terminal so the
+# questionnaire's interactive picker works):
+#
+#   bash -c "$(curl -fsSL https://joinstash.ai/install)"
+#
+# If no Python toolchain is present, the script
+# bootstraps `uv` (a single Rust binary) which downloads the right Python
+# version automatically.
+
+# Re-run safe (idempotent): if stashai is already installed, the picked
+# package manager will upgrade it to the latest version.
+set -euo pipefail
+
+PACKAGE="${STASH_INSTALL_PACKAGE:-stashai}"
+
+if command -v uv >/dev/null 2>&1; then
+  INSTALLER="uv"
+  INSTALL_CMD=(uv tool install --force --reinstall --refresh "$PACKAGE")
+else
+  printf '→ Installing uv (manages Python for you)…\n'
+  curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1
+  export PATH="$HOME/.local/bin:$PATH"
+  INSTALLER="uv"
+  INSTALL_CMD=(uv tool install --force --reinstall --refresh "$PACKAGE")
+fi
+
+printf '→ Installing %s via %s…\n' "$PACKAGE" "$INSTALLER"
+"${INSTALL_CMD[@]}" >/dev/null 2>&1
+
+STASH_BIN="$(command -v stash || true)"
+if [ -z "$STASH_BIN" ] && [ -x "$HOME/.local/bin/stash" ]; then
+  STASH_BIN="$HOME/.local/bin/stash"
+fi
+
+if [ -z "$STASH_BIN" ]; then
+  cat >&2 <<'MSG'
+stash installed, but it isn't on PATH yet. Add this to your shell rc and
+re-open the terminal (or `source` your rc):
+
+  export PATH="$HOME/.local/bin:$PATH"
+
+Then re-run:
+
+  bash -c "$(curl -fsSL https://joinstash.ai/install)"
+MSG
+  exit 1
+fi
+
+if [ "$#" -gt 0 ]; then
+  exec "$STASH_BIN" "$@"
+fi
+
+# If stdin isn't a terminal, the user piped us via `curl … | bash`. The
+# /dev/tty redirect trick to recover interactivity hits a Python 3.14 +
+# macOS asyncio kqueue bug (OSError EINVAL on add_reader for the
+# redirected fd). The reliable fix is the `bash -c "$(curl ...)"` form
+# which keeps stdin as the natural terminal — surface the right command
+# instead of crashing inside questionary.
+if [ ! -t 0 ]; then
+  cat >&2 <<'MSG'
+stash is installed, but the setup wizard needs an interactive terminal.
+Re-run with this form (it keeps stdin attached to your shell):
+
+  bash -c "$(curl -fsSL https://joinstash.ai/install)"
+
+Or just run it now:
+
+  stash signin
+
+MSG
+  exit 0
+fi
+
+# Stdin is a real terminal; launch the questionnaire. `stash signin`
+# asks scope, managed-vs-self-host, browser sign-in, workspace, and the
+# Claude Code plugin install (when detected).
+exec "$STASH_BIN" signin

@@ -1,0 +1,48 @@
+# ==================== Secrets & Environment ====================
+.env
+.env.*
+*.env
+*.env.*
+# ...but DO track the example templates
+!.env.example
+!**/.env.example
+credentials.json
+.credentials
+*.pem
+*.key
+
+# ==================== Graphify runtime cache (regeneratable, do not commit) ====================
+graphify-out/.graphify_analysis.json
+graphify-out/cache/
+
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+venv/
+
+# ==================== Node / Frontend ====================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+.cache/
+.next/
+
+# ==================== OS / editor cruft ====================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

@@ -1,0 +1,28 @@
+# Render blueprint for the Aspose.Slides REST service that the native-export
+# sandbox (backend/exports/native/) talks to for per-element PPTX construction.
+#
+# This is the only hosted service DEFINED as a render.yaml blueprint. It is
+# NOT the only Render-managed service: our whole hosted prod (backend →
+# api.joinstash.ai, frontend, collab, celery worker + beat) also runs on
+# Render, auto-deploying on every commit to main — those services are
+# configured in the Render dashboard, not in this file, so the repo has no
+# blueprint for them. docker-compose.prod.yml is for SELF-HOSTERS only and is
+# not how joinstash.ai deploys. The sandbox CLI hits this service's public URL
+# directly.
+services:
+  - type: web
+    name: aspose-pptx
+    runtime: docker
+    rootDir: powerpoint-mcp
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: ASPOSE_LICENSE_DATA
+        sync: false  # base64 of Aspose.SlidesforPythonvia.NET.lic; set in dashboard
+      - key: ASPOSE_PPTX_TOKEN
+        generateValue: true  # shared bearer; copy to ASPOSE_PPTX_TOKEN on the caller
+      - key: MAX_SESSIONS
+        value: "3"
+      - key: SESSION_TIMEOUT_MINUTES
+        value: "60"

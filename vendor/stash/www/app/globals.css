@@ -1,0 +1,239 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  /* Warm paper palette — deliberately off the cool clinical white that
+     Supermemory/Hyperspell use, and matched to the product's Notion-tan UI
+     so the landing and the app finally read as the same brand. */
+  --bg-base: #FBFAF8;
+  --bg-surface: #F4F2EC;
+  --bg-raised: #EBE8DF;
+  --bg-inverted: #1A1714;
+
+  --border: #E4E0D7;
+  --border-subtle: #EEEBE3;
+
+  --text-strong: #1A1714;
+  --text: #44403A;
+  --text-dim: #6B655B;
+  --text-muted: #9A9389;
+  --text-on-inverted: #EDE9E2;
+  --text-on-inverted-dim: #A39C90;
+
+  --brand: #F97316;
+  --brand-hover: #EA580C;
+  --brand-ink: #7C2D12;
+  --brand-soft: rgba(249, 115, 22, 0.12);
+
+  --agent: #EA580C;
+  --agent-soft: rgba(249, 115, 22, 0.14);
+  --human: #2563EB;
+  --human-soft: rgba(37, 99, 235, 0.12);
+
+  --shadow-card: 0 1px 2px rgba(26, 23, 20, 0.04), 0 12px 28px -18px rgba(26, 23, 20, 0.16);
+  --shadow-terminal: 0 30px 80px -40px rgba(26, 23, 20, 0.55);
+
+  /* Warm dot-field texture — the reusable brand motif. A sparse, low-opacity
+     dotted field, NOT a stroke-heavy grid (the look we're avoiding). */
+  --dot-field: radial-gradient(rgba(26, 23, 20, 0.05) 1px, transparent 1.4px);
+  --dot-field-size: 22px 22px;
+}
+
+@theme inline {
+  --color-background: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+  --color-inverted: var(--bg-inverted);
+
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+
+  --color-ink: var(--text-strong);
+  --color-foreground: var(--text);
+  --color-dim: var(--text-dim);
+  --color-muted: var(--text-muted);
+  --color-on-inverted: var(--text-on-inverted);
+  --color-on-inverted-dim: var(--text-on-inverted-dim);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-ink: var(--brand-ink);
+
+  --font-sans: var(--font-instrument-sans), 'Instrument Sans', sans-serif;
+  --font-display: var(--font-space-grotesk), 'Space Grotesk', var(--font-instrument-sans), sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
+}
+
+html, body {
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--brand);
+  color: #FFFFFF;
+}
+
+/* ---------------------------------------------------------------
+ * Markdown typography for /pages — same approach as the product app:
+ * `@tailwindcss/typography` (the `prose` class) is the base, with its
+ * CSS-variable palette pinned to www's tokens so rendered pastes and
+ * the Tiptap editor match the site's look.
+ * --------------------------------------------------------------- */
+.prose {
+  --tw-prose-body: var(--text);
+  --tw-prose-headings: var(--text-strong);
+  --tw-prose-lead: var(--text-dim);
+  --tw-prose-links: var(--brand);
+  --tw-prose-bold: var(--text-strong);
+  --tw-prose-counters: var(--text-muted);
+  --tw-prose-bullets: var(--text-muted);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--text-dim);
+  --tw-prose-quote-borders: var(--brand);
+  --tw-prose-captions: var(--text-muted);
+  --tw-prose-code: var(--brand-ink);
+  --tw-prose-pre-code: var(--text);
+  --tw-prose-pre-bg: var(--bg-raised);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border-subtle);
+  color: var(--tw-prose-body);
+  max-width: none;
+}
+.prose :where(h1, h2, h3, h4):not(:where([class~="not-prose"] *)) {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+.prose :where(code):not(:where([class~="not-prose"] *, pre *)) {
+  background: var(--brand-soft);
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-weight: inherit;
+}
+.prose :where(code):not(:where([class~="not-prose"] *, pre *))::before,
+.prose :where(code):not(:where([class~="not-prose"] *, pre *))::after {
+  content: "";
+}
+.prose :where(blockquote):not(:where([class~="not-prose"] *)) {
+  background: rgba(249, 115, 22, 0.05);
+  border-radius: 0 6px 6px 0;
+  padding: 0.4em 1em;
+  font-style: italic;
+}
+
+/* Tiptap editor (the markdown edit page) */
+.tiptap p.is-editor-empty:first-child::before {
+  color: var(--text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Page body — readable but compact, matching the app's page editor. */
+.file-page-body {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* Editor rhythm: prose-sm's ~1.14em paragraph margins read as
+   double-spacing while typing; tighten to match the rendered view. */
+.ProseMirror.file-page-body p {
+  margin: 0.3em 0;
+}
+.ProseMirror.file-page-body ul,
+.ProseMirror.file-page-body ol {
+  margin: 0.35em 0;
+}
+.ProseMirror.file-page-body li {
+  margin: 0.15em 0;
+}
+.ProseMirror.file-page-body blockquote {
+  margin: 0.5em 0;
+}
+.ProseMirror.file-page-body > :first-child {
+  margin-top: 0;
+}
+.ProseMirror.file-page-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Comment anchors — wraps the quoted range a comment is attached to,
+   same marker + treatment as the app. The span is injected at runtime,
+   so this lives in @layer base to survive Tailwind v4's purge (a bare
+   runtime-only attribute selector gets dropped from the build). */
+@layer base {
+  [data-comment-id] {
+    background: rgba(254, 240, 138, 0.45);
+    border-radius: 2px;
+  }
+}
+
+/* Live-collaboration carets (same classes the app styles) */
+.collaboration-cursor__caret {
+  border-left: 1px solid #0d0d0d;
+  border-right: 1px solid #0d0d0d;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+.collaboration-cursor__label {
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  left: -1px;
+  line-height: normal;
+  padding: 0.1rem 0.3rem;
+  position: absolute;
+  top: -1.4em;
+  user-select: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.15); }
+  50%      { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.04); }
+}
+
+@keyframes cursor-blink {
+  50% { opacity: 0; }
+}
+
+/* Section reveal — a short, brand-quiet rise used on kickers and headings.
+   Disabled under reduced-motion below. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rise-in {
+  animation: rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The signature mono kicker: [ SECTION.NAME ] in JetBrains Mono. One
+   ownable label treatment reused across every section. */
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5ch;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+}
+.kicker::before { content: "["; color: var(--brand); }
+.kicker::after  { content: "]"; color: var(--brand); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-in { animation: none; }
+}

@@ -1,0 +1,24 @@
+# Local hosting override for docker-compose.prod.yml.
+#
+# Use this when hosting Stash on localhost without a public domain:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.local.yml up -d
+#
+# Caddy is disabled here because local hosting does not need 80/443, HTTPS,
+# or domain routing. The app is exposed directly on the product dev ports.
+
+services:
+  backend:
+    ports:
+      - "3456:3456"
+
+  frontend:
+    ports:
+      - "3457:3457"
+
+  collab:
+    ports:
+      - "3458:3458"
+
+  caddy:
+    profiles:
+      - production-domain
