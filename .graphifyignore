@@ -1,0 +1,70 @@
+# .graphifyignore — controls what graphify indexes for 42-Command-Center.
+# Syntax is gitignore-compatible. Keeps the graph focused on real source code.
+
+# --- Dependencies ---
+**/node_modules/
+**/.venv/
+**/venv/
+**/__pycache__/
+**/.next/
+**/.turbo/
+**/.cache/
+
+# --- Build / generated artifacts ---
+**/dist/
+**/build/
+**/out/
+**/coverage/
+**/*.tsbuildinfo
+
+# --- Lock files (huge, no structural value) ---
+**/*.lock
+**/bun.lock
+**/package-lock.json
+**/yarn.lock
+**/uv.lock
+
+# --- Minified / generated ---
+**/*.min.js
+**/*.min.css
+**/*.map
+
+# --- Binary / media ---
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.ico
+**/*.svg
+**/*.pdf
+**/*.mp4
+**/*.woff
+**/*.woff2
+**/*.ttf
+**/*.eot
+
+# --- OS / editor cruft ---
+.DS_Store
+**/.DS_Store
+Thumbs.db
+**/*.swp
+.idea/
+.vscode/
+
+# --- Download / perf data ---
+download/
+perf/
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# --- The graphify output itself (don't graph the graph) ---
+graphify-out/
+
+# --- Git ---
+.git/
+
+# --- Large generated reports ---
+worklog.md
+PLATFORM-REPORT.md
