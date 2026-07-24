@@ -8,7 +8,7 @@ STASH_DIR ?= vendor/stash
 
 .PHONY: help graph graph-update audit query path explain watch \
         stash-up stash-down stash-setup stash-ls stash-share stash-read \
-        stash-audit session-end
+        stash-audit session-end session-context
 
 help: ## Show this help
 	@echo "42-Command-Center — graphify (structural memory) + stash (session memory)"
@@ -32,7 +32,8 @@ help: ## Show this help
 	@echo "  make stash-audit   Verify vendor/stash/ has no live upstream URLs (privacy)"
 	@echo ""
 	@echo "SESSION PROTOCOL:"
-	@echo "  make session-end   Refresh graph + audit + show WORKLOG.md template"
+	@echo "  make session-end          Refresh graph + audit + stash-share + WORKLOG prompt"
+	@echo "  make session-context Q='..'  UNIFIED query: graphify + stash in one answer"
 	@echo ""
 
 # ----------------------------- GRAPHIFY ---------------------------------
@@ -109,9 +110,26 @@ stash-audit: ## Verify vendor/stash/ has no live upstream URLs (privacy check)
 
 # ----------------------------- SESSION PROTOCOL -------------------------
 
-session-end: ## Refresh graph + audit + show WORKLOG.md template
-	$(GRAPHIFY) update . --code-only
+session-end: ## Refresh graph + audit + stash-share + show WORKLOG template
+	$(GRAPHIFY) update .
 	$(MAKE) audit
+	@echo ""
+	@echo "=========================================="
+	@echo "GRAPH REFRESHED — now share session to stash (optional)"
+	@echo "=========================================="
+	@if [ -x "$(STASH_VENV)/bin/stash" ]; then \
+	  if $(STASH_VENV)/bin/stash status >/dev/null 2>&1; then \
+	    echo "[stash] backend reachable — sharing session..."; \
+	    $(STASH_VENV)/bin/stash share || echo "[stash] share failed (continuing)"; \
+	    echo "[stash] session shared to local stash backend"; \
+	  else \
+	    echo "[stash] backend not reachable — start with: make stash-up"; \
+	    echo "[stash] skipping share (you can run 'make stash-share' later)"; \
+	  fi; \
+	else \
+	  echo "[stash] CLI not installed — install with: make stash-setup"; \
+	  echo "[stash] skipping share"; \
+	fi
 	@echo ""
 	@echo "=========================================="
 	@echo "SESSION END — append the following to WORKLOG.md:"
@@ -124,6 +142,13 @@ session-end: ## Refresh graph + audit + show WORKLOG.md template
 	@echo "What I did:"
 	@echo "- <step 1>"
 	@echo ""
+	@echo "Graphify nodes touched:"
+	@echo "- <node_id_1> — <one-line description of what changed>"
+	@echo "- <node_id_2> — <one-line description of what changed>"
+	@echo '  (run: graphify query "<your task>"  to find node ids)'
+	@echo '  (next agent runs: make session-context Q="<node_id>"  to recover)'
+	@echo '  (this session as prior context - the cross-reference bridge)' 
+	@echo ""
 	@echo "Decisions made:"
 	@echo "- <decision + rationale>"
 	@echo ""
@@ -135,4 +160,12 @@ session-end: ## Refresh graph + audit + show WORKLOG.md template
 	@echo ""
 	@echo "=========================================="
 	@echo "Then: git add graphify-out/ WORKLOG.md && git commit"
-	@echo "Optionally: make stash-share"
+	@echo "(stash share already done above if backend was reachable)"
+
+session-context: ## UNIFIED query: graphify + stash in one answer. Usage: make session-context Q='how does auth work'
+	@if [ -z "$(Q)" ]; then \
+	  echo "Usage: make session-context Q=\"<question or node id>\""; \
+	  echo "Example: make session-context Q=\"how does proof of compute work\""; \
+	  exit 1; \
+	fi
+	./scripts/session-context.sh "$(Q)"

@@ -30,6 +30,41 @@ This repo has **two complementary memory systems** installed:
 Use both. Reading only the graph loses prior decisions; reading only stash loses
 the structural map.
 
+### Unified query (the bridge between the two layers)
+
+For any "how does X work" or "where do I find Y" question, run ONE command:
+
+```bash
+make session-context Q="how does the dashboard work"
+```
+
+This runs `graphify query` AND `stash search` in one pass and returns a single
+merged answer: structural nodes from the graph + prior agent sessions that
+matched the question (or that touched the relevant nodes). Token-efficient —
+one query, both layers, no redundant reads.
+
+If you only need one layer (e.g. you already know the node and want its history),
+use the individual commands: `graphify query`, `graphify explain`,
+`make stash-ls`, `make stash-read ID=<id>`.
+
+### Cross-reference convention (mandatory in WORKLOG.md)
+
+When you end a session, the WORKLOG.md template includes a `Graphify nodes
+touched:` field. **Fill it in.** This is the cross-reference bridge:
+
+1. You record which graphify node IDs your session touched (e.g.
+   `frontend_src_app_page_tsx`, `backend_routes_dashboard_py`).
+2. `make stash-share` pushes your session transcript to local stash, which
+   indexes the worklog text including those node IDs.
+3. The next agent runs `make session-context Q="<node_id>"` and gets:
+   - The structural explanation of that node (from graphify)
+   - **Plus your prior session transcript** (from stash, matched on the node ID)
+
+This is what makes the two layers actually integrated instead of just
+co-installed. Without the cross-reference field filled in, the unified query
+can only match on question text — it can't recover "what did the last agent do
+to THIS specific node". With it filled in, it can.
+
 ## The graphify knowledge graph (your codebase memory)
 
 The graphify graph lives at `graphify-out/`. **It is currently empty** because
@@ -52,13 +87,21 @@ add code, the pre-commit hook will refresh the graph automatically.
 3. Only fall back to reading raw source when the graph points you to a specific
    function and you need its exact bytes.
 
-### After making changes — MANDATORY
+### After making changes — MANDATORY (once code exists)
 
-1. The git pre-commit hook (`.git/hooks/pre-commit`) auto-refreshes the graph
-   on commit. You do not need to run it manually.
-2. Regenerate the audit if structural changes occurred: `make audit`
-3. Append to `WORKLOG.md` what you did, what you decided, what's next.
-4. Commit `graphify-out/` + `WORKLOG.md` + your code changes together.
+1. **Run `make session-end`** — this single command does the full close-out:
+   - Refreshes the graphify graph (`graphify update .`)
+   - Regenerates AUDIT.md
+   - Pushes your session transcript to local stash (`stash share`) — only if
+     the stash backend is reachable; skipped gracefully otherwise
+   - Prints the WORKLOG.md template with the `Graphify nodes touched:` field
+     for you to fill in
+2. **Fill in the WORKLOG.md entry** — especially the `Graphify nodes touched:`
+   field. This is the cross-reference bridge that lets the next agent recover
+   your session via `make session-context Q="<node_id>"`.
+3. **Commit `graphify-out/` + `WORKLOG.md` + your code changes together** so the
+   next agent sees a consistent state. The pre-commit hook auto-refreshes the
+   graph on commit; you don't need to run it manually.
 
 ## Context discipline (prevent forgetting on long sessions)
 
