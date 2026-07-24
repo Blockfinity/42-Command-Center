@@ -19,6 +19,8 @@
 #     which stash indexes when the worklog is shared via `make stash-share`)
 #   - Falls back gracefully if either tool is missing or the stash backend
 #     is down — the question still gets answered from whichever layer is up
+#   - Does NOT cap either tool: graphify runs native (no --budget override),
+#     stash searches use a high limit (1000) so nothing is forgotten
 #
 # Privacy:
 #   - graphify runs locally (--code-only, no LLM, no network)
@@ -56,16 +58,17 @@ GRAPHIFY_NODES=""
 
 if [ -x "$GRAPHIFY" ]; then
   echo "─── GRAPHIFY (structural map) ──────────────────────────────"
-  # Capture graphify output, then echo it back to the caller.
-  # --budget caps output tokens (default 2000, override via env var).
-  OUT=$("$GRAPHIFY" query "$QUESTION" --budget "${GRAPHIFY_QUERY_BUDGET:-2000}" 2>&1) || true
+  # Capture graphify's NATIVE query output, then echo it back uncapped.
+  # No --budget override — graphify uses its own native default. Agents who want
+  # a different budget should call `graphify query` directly.
+  OUT=$("$GRAPHIFY" query "$QUESTION" 2>&1) || true
   if [ -n "$OUT" ] && [ "$OUT" != "" ]; then
     echo "$OUT"
     GRAPHIFY_ANSWERED=1
     # Extract node ids from graphify output. Node ids look like
     # "backend_routes_auth_login" or "frontend_src_app_page" — underscored paths.
     # We grep for the canonical graphify node-id pattern.
-    GRAPHIFY_NODES=$(echo "$OUT" | grep -oE '[a-z][a-z0-9_]*_[a-z0-9_]+' | sort -u | head -10)
+    GRAPHIFY_NODES=$(echo "$OUT" | grep -oE '[a-z][a-z0-9_]*_[a-z0-9_]+' | sort -u)
   else
     echo "(graphify returned no answer — graph may be empty or stale)"
   fi
@@ -91,7 +94,7 @@ stash_search() {
   # Try the search. If the backend is down, stash prints an error and exits
   # non-zero — we swallow it and report the failure cleanly.
   local out
-  out=$("$STASH" search "$query" --include-sources sessions -n 5 2>&1) || true
+  out=$("$STASH" search "$query" --include-sources sessions -n 1000 2>&1) || true
   if echo "$out" | grep -qiE 'connection|refused|error|down|unreachable'; then
     echo "(stash backend unreachable — start with: make stash-up)"
     return 1
@@ -119,7 +122,7 @@ if [ -n "$GRAPHIFY_NODES" ] && [ -x "$STASH" ]; then
   FOUND_NODE_SESSION=0
   while IFS= read -r node; do
     [ -z "$node" ] && continue
-    out=$("$STASH" search "$node" --include-sources sessions -n 3 2>&1) || true
+    out=$("$STASH" search "$node" --include-sources sessions -n 1000 2>&1) || true
     if [ -n "$out" ] && ! echo "$out" | grep -qiE 'connection|refused|error|down|unreachable|no results|no matches'; then
       echo "  node: $node"
       echo "$out" | sed 's/^/    /'

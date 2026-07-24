@@ -30,22 +30,45 @@ This repo has **two complementary memory systems** installed:
 Use both. Reading only the graph loses prior decisions; reading only stash loses
 the structural map.
 
-### Unified query (the bridge between the two layers)
+### Native features — the PRIMARY path (use these directly, uncapped)
 
-For any "how does X work" or "where do I find Y" question, run ONE command:
+The reason these tools are installed is to use their **native capabilities
+directly**. Do not let a wrapper stand between you and the tools. Nothing in
+this repo caps either tool — graphify returns its full native answer, stash
+returns full recall.
 
+**Graphify — understand the code without reading it (once code exists here):**
+```bash
+graphify query "<question>"      # BFS traversal, matching nodes + edges (native)
+graphify path "nodeA" "nodeB"    # shortest path between two nodes
+graphify explain "nodeName"      # plain-language explanation of a node + neighbors
+graphify affected "nodeName"     # reverse traversal — everything that impacts X
+graphify god-nodes               # architectural hubs (highest blast radius)
+make watch                       # live graph updates as you edit
+```
+The `graphify` binary lives at `/home/z/graphify-venv/bin/graphify`.
+(The graph is currently empty — these populate as code lands.)
+
+**Stash — never forget (full recall, no cap):**
+```bash
+make stash-ls                    # list ALL prior agent sessions
+stash search "<query>"           # search every session + file — returns all matches
+make stash-read ID=<id>          # read a full session transcript
+make stash-share                 # push your session to local stash (also in make session-end)
+```
+The stash CLI lives at `/home/z/stash-venv/bin/stash` (install: `make stash-setup`).
+Stash search returns everything that matched — nothing is truncated, nothing forgotten.
+
+### Unified query (optional convenience — does NOT cap either tool)
+
+For a single combined answer across both layers, you MAY run:
 ```bash
 make session-context Q="how does the dashboard work"
 ```
-
-This runs `graphify query` AND `stash search` in one pass and returns a single
-merged answer: structural nodes from the graph + prior agent sessions that
-matched the question (or that touched the relevant nodes). Token-efficient —
-one query, both layers, no redundant reads.
-
-If you only need one layer (e.g. you already know the node and want its history),
-use the individual commands: `graphify query`, `graphify explain`,
-`make stash-ls`, `make stash-read ID=<id>`.
+This runs `graphify query` (native, uncapped) AND `stash search` (high limit,
+uncapped) in one pass and merges structural + temporal results. It is a
+convenience — it does not restrict either tool. If you only need one layer, use
+the native commands above directly.
 
 ### Cross-reference convention (mandatory in WORKLOG.md)
 
